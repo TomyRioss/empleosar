@@ -1,4 +1,7 @@
-export { auth as proxy } from "@/auth";
+import NextAuth from "next-auth";
+import { authConfig } from "@/auth.config";
+
+export const { auth: proxy } = NextAuth(authConfig);
 
 export const config = {
   matcher: ["/((?!_next/static|_next/image|favicon.ico|api/auth|login|register).*)"],

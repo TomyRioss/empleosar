@@ -33,6 +33,8 @@ model Job {
   statuses       JobStatus[]
 
   @@unique([source, externalId])
+  @@index([postedAt])
+  @@index([source, keywordMatched])
 }
 
 model User {

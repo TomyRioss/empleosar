@@ -2,8 +2,7 @@ import { getJobs } from "@/lib/jobs";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { setJobStatus } from "@/app/jobs/actions";
-import type { JobSource } from "@prisma/client";
-import { JobStatusValue } from "@prisma/client";
+import { JobSource, JobStatusValue } from "@prisma/client";
 
 export default async function Home({
   searchParams,
@@ -17,8 +16,12 @@ export default async function Home({
 }) {
   const params = await searchParams;
   const session = await auth();
+  const source =
+    params.source && Object.values(JobSource).includes(params.source as JobSource)
+      ? (params.source as JobSource)
+      : undefined;
   const jobs = await getJobs({
-    source: params.source as JobSource | undefined,
+    source,
     keyword: params.keyword || undefined,
     search: params.search || undefined,
     sort: params.sort === "oldest" ? "oldest" : "recent",

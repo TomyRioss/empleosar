@@ -2,10 +2,10 @@ import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
+import { authConfig } from "@/auth.config";
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
-  session: { strategy: "jwt" },
-  pages: { signIn: "/login" },
+  ...authConfig,
   providers: [
     Credentials({
       credentials: {
@@ -13,7 +13,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         password: { label: "Password", type: "password" },
       },
       authorize: async (credentials) => {
-        const email = credentials?.email as string | undefined;
+        const email = (credentials?.email as string | undefined)?.trim().toLowerCase();
         const password = credentials?.password as string | undefined;
         if (!email || !password) return null;
 
@@ -27,21 +27,4 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       },
     }),
   ],
-  callbacks: {
-    // NextAuth v5's `auth` export only redirects unauthenticated requests when
-    // used as middleware if `authorized` is defined here: bare
-    // `export { auth as middleware }` does NOT redirect on its own (see
-    // node_modules/next-auth/lib/index.d.ts callbacks.authorized docs).
-    authorized({ auth }) {
-      return !!auth?.user;
-    },
-    jwt({ token, user }) {
-      if (user) token.id = user.id;
-      return token;
-    },
-    session({ session, token }) {
-      if (session.user) session.user.id = token.id as string;
-      return session;
-    },
-  },
 });
