@@ -5,12 +5,10 @@ export const authConfig: NextAuthConfig = {
   pages: { signIn: "/login" },
   providers: [],
   callbacks: {
-    // NextAuth v5's `auth` export only redirects unauthenticated requests when
-    // used as middleware if `authorized` is defined here: bare
-    // `export { auth as middleware }` does NOT redirect on its own (see
-    // node_modules/next-auth/lib/index.d.ts callbacks.authorized docs).
-    authorized({ auth }) {
-      return !!auth?.user;
+    // Login is optional: the feed and job status are usable as a guest.
+    // No route requires a session, so this always allows the request through.
+    authorized() {
+      return true;
     },
     jwt({ token, user }) {
       if (user) token.id = user.id;

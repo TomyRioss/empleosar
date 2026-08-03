@@ -1,8 +1,9 @@
 import { getJobs } from "@/lib/jobs";
 import { prisma } from "@/lib/prisma";
-import { auth } from "@/auth";
-import { setJobStatus } from "@/app/jobs/actions";
-import { JobSource, JobStatusValue } from "@prisma/client";
+import { auth, signOut } from "@/auth";
+import { StatusButtons } from "@/app/jobs/StatusButtons";
+import { JobSource } from "@prisma/client";
+import Link from "next/link";
 
 export default async function Home({
   searchParams,
@@ -31,7 +32,25 @@ export default async function Home({
 
   return (
     <main className="mx-auto max-w-3xl p-8">
-      <h1 className="text-2xl font-semibold mb-6">Empleos Argentina</h1>
+      <div className="flex justify-between items-center mb-6">
+        <h1 className="text-2xl font-semibold">Empleos Argentina</h1>
+        {session?.user ? (
+          <form
+            action={async () => {
+              "use server";
+              await signOut({ redirectTo: "/" });
+            }}
+          >
+            <button type="submit" className="text-sm underline">
+              Salir ({session.user.email})
+            </button>
+          </form>
+        ) : (
+          <Link href="/login" className="text-sm underline">
+            Ingresar
+          </Link>
+        )}
+      </div>
 
       <form className="flex flex-wrap gap-2 mb-6" method="get">
         <input
@@ -87,26 +106,11 @@ export default async function Home({
                 Ver original
               </a>
             </div>
-            <div className="flex gap-2 mt-3">
-              {(["SAVED", "APPLIED", "DISCARDED"] as JobStatusValue[]).map((status) => (
-                <form
-                  key={status}
-                  action={async () => {
-                    "use server";
-                    await setJobStatus(job.id, status);
-                  }}
-                >
-                  <button
-                    type="submit"
-                    className={`text-xs border rounded px-2 py-1 ${
-                      job.statuses[0]?.status === status ? "bg-black text-white" : ""
-                    }`}
-                  >
-                    {status === "SAVED" ? "Guardar" : status === "APPLIED" ? "Aplicado" : "Descartar"}
-                  </button>
-                </form>
-              ))}
-            </div>
+            <StatusButtons
+              jobId={job.id}
+              isLoggedIn={!!session?.user}
+              initialStatus={job.statuses[0]?.status ?? null}
+            />
           </li>
         ))}
       </ul>

@@ -20,7 +20,7 @@ export async function getJobs(filters: JobFilters = {}) {
     },
     orderBy: { postedAt: filters.sort === "oldest" ? "asc" : "desc" },
     include: {
-      statuses: filters.userId ? { where: { userId: filters.userId } } : false,
+      statuses: { where: { userId: filters.userId ?? "" } },
     },
   });
 }
