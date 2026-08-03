@@ -5,6 +5,7 @@ export type JobFilters = {
   source?: JobSource;
   keyword?: string;
   search?: string;
+  sort?: "recent" | "oldest";
 };
 
 export async function getJobs(filters: JobFilters = {}) {
@@ -16,7 +17,7 @@ export async function getJobs(filters: JobFilters = {}) {
         ? { contains: filters.search, mode: "insensitive" }
         : undefined,
     },
-    orderBy: { postedAt: "desc" },
+    orderBy: { postedAt: filters.sort === "oldest" ? "asc" : "desc" },
     include: { statuses: true },
   });
 }
