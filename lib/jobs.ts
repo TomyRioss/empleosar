@@ -6,6 +6,7 @@ export type JobFilters = {
   keyword?: string;
   search?: string;
   sort?: "recent" | "oldest";
+  userId?: string;
 };
 
 export async function getJobs(filters: JobFilters = {}) {
@@ -18,6 +19,8 @@ export async function getJobs(filters: JobFilters = {}) {
         : undefined,
     },
     orderBy: { postedAt: filters.sort === "oldest" ? "asc" : "desc" },
-    include: { statuses: true },
+    include: {
+      statuses: filters.userId ? { where: { userId: filters.userId } } : false,
+    },
   });
 }

@@ -1,6 +1,9 @@
 import { getJobs } from "@/lib/jobs";
 import { prisma } from "@/lib/prisma";
+import { auth } from "@/auth";
+import { setJobStatus } from "@/app/jobs/actions";
 import type { JobSource } from "@prisma/client";
+import { JobStatusValue } from "@prisma/client";
 
 export default async function Home({
   searchParams,
@@ -13,11 +16,13 @@ export default async function Home({
   }>;
 }) {
   const params = await searchParams;
+  const session = await auth();
   const jobs = await getJobs({
     source: params.source as JobSource | undefined,
     keyword: params.keyword || undefined,
     search: params.search || undefined,
     sort: params.sort === "oldest" ? "oldest" : "recent",
+    userId: session?.user?.id,
   });
   const keywords = await prisma.keyword.findMany({ where: { active: true } });
 
@@ -78,6 +83,26 @@ export default async function Home({
               >
                 Ver original
               </a>
+            </div>
+            <div className="flex gap-2 mt-3">
+              {(["SAVED", "APPLIED", "DISCARDED"] as JobStatusValue[]).map((status) => (
+                <form
+                  key={status}
+                  action={async () => {
+                    "use server";
+                    await setJobStatus(job.id, status);
+                  }}
+                >
+                  <button
+                    type="submit"
+                    className={`text-xs border rounded px-2 py-1 ${
+                      job.statuses[0]?.status === status ? "bg-black text-white" : ""
+                    }`}
+                  >
+                    {status === "SAVED" ? "Guardar" : status === "APPLIED" ? "Aplicado" : "Descartar"}
+                  </button>
+                </form>
+              ))}
             </div>
           </li>
         ))}
