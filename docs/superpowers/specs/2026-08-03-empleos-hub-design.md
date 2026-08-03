@@ -8,17 +8,17 @@ Agregar en un solo lugar avisos laborales del mercado argentino recolectados de 
 ## Decisiones (de brainstorming)
 - Recolección: scraping automático (no APIs oficiales — no existen para LinkedIn/Computrabajo/ZonaJobs de empleos).
 - Ejecución: script Node separado del hosting de Next.js, corre con cron local (no Vercel Cron).
-- Storage: Supabase (Postgres) + Prisma. Permiso explícito del usuario otorgado para uso de Prisma/comandos DB en este proyecto.
+- Storage: Neon (Postgres) + Prisma. Permiso explícito del usuario otorgado para uso de Prisma/comandos DB en este proyecto.
 - Alcance de avisos: filtrado por lista de keywords configurable (no todo el mercado, no un rubro fijo hardcodeado).
-- Auth: Supabase Auth (login real, no local-only).
+- Auth: NextAuth (Auth.js) Credentials provider, email+password, sesión JWT. Sin magic link (no hay servicio de envío de email configurado).
 - Features hub: feed + filtro por fuente + filtro por keyword + búsqueda texto libre + orden por fecha + estado por aviso (guardado/aplicado/descartado).
 
 ## Arquitectura
 
 ```
-[Scraper Node (cron local)] --upsert--> [Supabase Postgres via Prisma] <--query-- [Next.js hub (Vercel/local)]
-                                                                                        |
-                                                                                  [Supabase Auth]
+[Scraper Node (cron local)] --upsert--> [Neon Postgres via Prisma] <--query-- [Next.js hub (Vercel/local)]
+                                                                                    |
+                                                                              [NextAuth (Credentials)]
 ```
 
 Dos codebases dentro del mismo repo: `app/` (hub Next.js existente) y un nuevo `scraper/` (script Node standalone, mismo Prisma client/schema compartido).
@@ -55,12 +55,21 @@ model Job {
   @@unique([source, externalId])
 }
 
+model User {
+  id           String      @id @default(cuid())
+  email        String      @unique
+  passwordHash String
+  createdAt    DateTime    @default(now())
+  statuses     JobStatus[]
+}
+
 model JobStatus {
   id        String          @id @default(cuid())
   userId    String
   jobId     String
   status    JobStatusValue
   updatedAt DateTime        @updatedAt
+  user      User            @relation(fields: [userId], references: [id])
   job       Job             @relation(fields: [jobId], references: [id])
 
   @@unique([userId, jobId])
@@ -73,7 +82,7 @@ model Keyword {
 }
 ```
 
-`userId` referencia al `id` de Supabase Auth (no hay tabla `User` propia — Supabase la maneja).
+`User` es tabla propia (Neon no trae auth). `passwordHash` con bcrypt. Sesión manejada por NextAuth (JWT, sin tabla de sesión).
 
 ## Scraper
 
@@ -90,14 +99,14 @@ Runner: por cada (keyword, fuente) llama `scrape`, upsert en `Job` por `(source,
 
 ## Hub web (Next.js, `app/`)
 
-- Ruta de login (Supabase Auth, email+password o magic link — a definir en plan).
-- Página feed: lista de `Job` con filtros (fuente, keyword, texto libre) y orden por `postedAt` desc. Query directa a Supabase vía Prisma desde server components.
+- Ruta de login/registro (NextAuth Credentials, email+password, sesión JWT).
+- Página feed: lista de `Job` con filtros (fuente, keyword, texto libre) y orden por `postedAt` desc. Query directa a Neon vía Prisma desde server components.
 - Por cada `Job`: botones guardar/aplicado/descartado que hacen upsert en `JobStatus` para el usuario logueado. Link "ver original" (`Job.url`, target _blank).
 - Página opcional de administración de keywords (alta/baja en tabla `Keyword`) — a confirmar prioridad en plan.
 
 ## Manejo de errores
 - Scraper: error en una fuente no aborta la corrida completa; se loguea (consola/archivo) y continúa con las demás fuentes/keywords.
-- Hub: si falla la query a Supabase, mostrar estado de error simple en la página, sin crash.
+- Hub: si falla la query a Neon, mostrar estado de error simple en la página, sin crash.
 
 ## Fuera de alcance (explícito)
 - No hay notificaciones push/email de nuevos avisos.

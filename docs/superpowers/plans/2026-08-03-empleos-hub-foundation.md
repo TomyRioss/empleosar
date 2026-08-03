@@ -2,18 +2,20 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Stand up the DB schema (Prisma + Supabase), Supabase Auth, and the Next.js hub feed (list, filter, search, save/applied/discarded state) — working end-to-end against seeded data, before the scraper exists.
+**Goal:** Stand up the DB schema (Prisma + Neon), NextAuth Credentials login, and the Next.js hub feed (list, filter, search, save/applied/discarded state) — working end-to-end against seeded data, before the scraper exists.
 
-**Architecture:** Next.js 16 App Router, server components query Postgres via Prisma directly (no separate API layer needed since scraper writes are out-of-process). Supabase Auth via `@supabase/ssr` for session handling in server components/middleware. Job status mutations via Next.js Server Actions.
+**Architecture:** Next.js 16 App Router, server components query Postgres (Neon) via Prisma directly (no separate API layer needed since scraper writes are out-of-process). NextAuth (Auth.js) v5 with Credentials provider (email+password, bcrypt hash) and JWT session strategy — no separate session table. Job status mutations via Next.js Server Actions.
 
-**Tech Stack:** Next.js 16, Prisma, Supabase (Postgres + Auth), `@supabase/ssr`, `@supabase/supabase-js`, Tailwind (already in project).
+**Tech Stack:** Next.js 16, Prisma, Neon (Postgres), `next-auth` v5 (`@auth/core`), `bcryptjs`, Tailwind (already in project).
 
 ## Global Constraints
 
 - Prisma/DB commands are explicitly authorized by the user for this project (see `docs/superpowers/specs/2026-08-03-empleos-hub-design.md`).
 - Do not enable `cacheComponents` / `use cache` on the feed page — job data must be fetched fresh on every request (see Next.js 16 caching docs, `node_modules/next/dist/docs/01-app/01-getting-started/08-caching.md`). Default (no directive) App Router behavior fetches fresh — leave it as-is.
-- `userId` in `JobStatus` is the Supabase Auth user id — there is no local `User` table.
+- `userId` in `JobStatus` is the app's own `User.id` (Prisma model) — Neon has no built-in auth, so this project owns the `User` table.
+- Passwords are hashed with bcrypt before storage — never store plaintext.
 - This plan produces a working hub against **seeded** `Job` rows (Task 2 seeds sample data). The real scraper is Plan B, a separate plan.
+- Neon connection string uses a single pooled `DATABASE_URL` (no separate `DIRECT_URL` — this project's Neon plan doesn't need it; `directUrl` is omitted from the datasource block).
 
 ---
 
@@ -26,7 +28,7 @@
 - Create: `lib/prisma.ts`
 
 **Interfaces:**
-- Produces: `prisma` singleton export from `lib/prisma.ts` (`import { prisma } from "@/lib/prisma"`), `PrismaClient` typed with models `Job`, `JobStatus`, `Keyword`, enums `JobSource`, `JobStatusValue`.
+- Produces: `prisma` singleton export from `lib/prisma.ts` (`import { prisma } from "@/lib/prisma"`), `PrismaClient` typed with models `Job`, `User`, `JobStatus`, `Keyword`, enums `JobSource`, `JobStatusValue`.
 
 - [ ] **Step 1: Install dependencies**
 
@@ -44,13 +46,11 @@ npx prisma init --datasource-provider postgresql
 This creates `prisma/schema.prisma` and `.env`. Delete the generated `.env` (we use `.env.local` for Next.js convention) and instead create `.env.local.example`:
 
 ```
-DATABASE_URL="postgresql://postgres:[PASSWORD]@[HOST]:5432/postgres?pgbouncer=true"
-DIRECT_URL="postgresql://postgres:[PASSWORD]@[HOST]:5432/postgres"
-NEXT_PUBLIC_SUPABASE_URL="https://[PROJECT].supabase.co"
-NEXT_PUBLIC_SUPABASE_ANON_KEY="[ANON_KEY]"
+DATABASE_URL="postgresql://user:password@host/db?sslmode=require&channel_binding=require"
+NEXTAUTH_SECRET="[RANDOM_32_BYTE_SECRET]"
 ```
 
-Tell the user to copy this to `.env.local` and fill in real Supabase project values (Supabase dashboard → Project Settings → Database / API).
+`NEXTAUTH_SECRET`: generate with `openssl rand -base64 32` (or ask the user). `.env.local` itself (with the real Neon `DATABASE_URL` the user provided) must already exist in the project root — verify it's present and gitignored before continuing; do not overwrite it if it already has a real `DATABASE_URL`, only add `NEXTAUTH_SECRET` if missing.
 
 - [ ] **Step 3: Write the schema**
 
@@ -62,9 +62,8 @@ generator client {
 }
 
 datasource db {
-  provider  = "postgresql"
-  url       = env("DATABASE_URL")
-  directUrl = env("DIRECT_URL")
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
 enum JobSource {
@@ -96,12 +95,21 @@ model Job {
   @@unique([source, externalId])
 }
 
+model User {
+  id           String      @id @default(cuid())
+  email        String      @unique
+  passwordHash String
+  createdAt    DateTime    @default(now())
+  statuses     JobStatus[]
+}
+
 model JobStatus {
   id        String         @id @default(cuid())
   userId    String
   jobId     String
   status    JobStatusValue
   updatedAt DateTime       @updatedAt
+  user      User           @relation(fields: [userId], references: [id])
   job       Job            @relation(fields: [jobId], references: [id])
 
   @@unique([userId, jobId])
@@ -114,9 +122,9 @@ model Keyword {
 }
 ```
 
-- [ ] **Step 4: Push schema to Supabase and generate client**
+- [ ] **Step 4: Push schema to Neon and generate client**
 
-Requires `.env.local` filled with real Supabase credentials first (ask user if not yet done).
+Requires `.env.local` with the real Neon `DATABASE_URL` (already provided by the user).
 
 ```bash
 npx prisma db push
@@ -167,8 +175,10 @@ Delete `scripts/verify-db.ts` after confirming (it's a one-off check, not part o
 
 ```bash
 git add prisma/schema.prisma lib/prisma.ts .env.local.example package.json package-lock.json
-git commit -m "feat: add Prisma schema and Supabase connection"
+git commit -m "feat: add Prisma schema and Neon connection"
 ```
+
+Do NOT commit `.env.local` (must already be gitignored by the Next.js template — verify with `git check-ignore .env.local`, it should print the path).
 
 ---
 
@@ -272,187 +282,157 @@ git commit -m "feat: add Prisma seed script with sample keywords and jobs"
 
 ---
 
-### Task 3: Supabase Auth (login/logout + session helpers)
+### Task 3: NextAuth Credentials (login/register + session + route protection)
 
 **Files:**
-- Create: `lib/supabase/server.ts`
-- Create: `lib/supabase/client.ts`
+- Create: `auth.ts` (project root)
+- Create: `app/api/auth/[...nextauth]/route.ts`
 - Create: `middleware.ts`
 - Create: `app/login/page.tsx`
 - Create: `app/login/actions.ts`
-- Create: `app/auth/callback/route.ts`
+- Create: `app/register/page.tsx`
+- Create: `app/register/actions.ts`
 
 **Interfaces:**
-- Produces: `createServerSupabaseClient()` (async, reads cookies, for use in server components/actions), `createBrowserSupabaseClient()` (for client components), middleware that refreshes the Supabase session cookie on every request.
-- Consumes: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` env vars from Task 1.
+- Produces: `auth()` (server-side session getter, `import { auth } from "@/auth"`, returns `Promise<{ user: { id: string; email: string } } | null>`), `signIn`/`signOut` server actions re-exported from `auth.ts`.
+- Consumes: `prisma` from `lib/prisma.ts` (Task 1's `User` model), `NEXTAUTH_SECRET` env var.
 
-- [ ] **Step 1: Install Supabase packages**
+- [ ] **Step 1: Install packages**
 
 ```bash
-npm install @supabase/supabase-js @supabase/ssr
+npm install next-auth@beta bcryptjs
+npm install -D @types/bcryptjs
 ```
 
-- [ ] **Step 2: Server client helper**
+`next-auth@beta` is NextAuth v5 (Auth.js), which supports the `auth()` helper and Next.js 16 App Router middleware used below.
 
-`lib/supabase/server.ts`:
+- [ ] **Step 2: Write `auth.ts`**
 
 ```ts
-import { createServerClient } from "@supabase/ssr";
-import { cookies } from "next/headers";
+import NextAuth from "next-auth";
+import Credentials from "next-auth/providers/credentials";
+import bcrypt from "bcryptjs";
+import { prisma } from "@/lib/prisma";
 
-export async function createServerSupabaseClient() {
-  const cookieStore = await cookies();
-
-  return createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll() {
-          return cookieStore.getAll();
-        },
-        setAll(cookiesToSet) {
-          try {
-            cookiesToSet.forEach(({ name, value, options }) =>
-              cookieStore.set(name, value, options)
-            );
-          } catch {
-            // called from a Server Component with no write access; middleware handles refresh
-          }
-        },
+export const { handlers, signIn, signOut, auth } = NextAuth({
+  session: { strategy: "jwt" },
+  pages: { signIn: "/login" },
+  providers: [
+    Credentials({
+      credentials: {
+        email: { label: "Email", type: "email" },
+        password: { label: "Password", type: "password" },
       },
-    }
-  );
-}
+      authorize: async (credentials) => {
+        const email = credentials?.email as string | undefined;
+        const password = credentials?.password as string | undefined;
+        if (!email || !password) return null;
+
+        const user = await prisma.user.findUnique({ where: { email } });
+        if (!user) return null;
+
+        const valid = await bcrypt.compare(password, user.passwordHash);
+        if (!valid) return null;
+
+        return { id: user.id, email: user.email };
+      },
+    }),
+  ],
+  callbacks: {
+    jwt({ token, user }) {
+      if (user) token.id = user.id;
+      return token;
+    },
+    session({ session, token }) {
+      if (session.user) session.user.id = token.id as string;
+      return session;
+    },
+  },
+});
 ```
 
-- [ ] **Step 3: Browser client helper**
+- [ ] **Step 3: Route handler**
 
-`lib/supabase/client.ts`:
+`app/api/auth/[...nextauth]/route.ts`:
 
 ```ts
-import { createBrowserClient } from "@supabase/ssr";
-
-export function createBrowserSupabaseClient() {
-  return createBrowserClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  );
-}
+export { GET, POST } from "@/auth";
 ```
 
-- [ ] **Step 4: Middleware to refresh session + protect routes**
+Wait — NextAuth v5 exports `handlers`, not `GET`/`POST` directly. Use:
+
+```ts
+import { handlers } from "@/auth";
+
+export const { GET, POST } = handlers;
+```
+
+- [ ] **Step 4: Middleware to protect routes**
 
 `middleware.ts` (project root):
 
 ```ts
-import { createServerClient } from "@supabase/ssr";
-import { NextResponse, type NextRequest } from "next/server";
-
-export async function middleware(request: NextRequest) {
-  let response = NextResponse.next({ request });
-
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll() {
-          return request.cookies.getAll();
-        },
-        setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value }) =>
-            request.cookies.set(name, value)
-          );
-          response = NextResponse.next({ request });
-          cookiesToSet.forEach(({ name, value, options }) =>
-            response.cookies.set(name, value, options)
-          );
-        },
-      },
-    }
-  );
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  const isAuthRoute = request.nextUrl.pathname.startsWith("/login");
-
-  if (!user && !isAuthRoute) {
-    const url = request.nextUrl.clone();
-    url.pathname = "/login";
-    return NextResponse.redirect(url);
-  }
-
-  if (user && isAuthRoute) {
-    const url = request.nextUrl.clone();
-    url.pathname = "/";
-    return NextResponse.redirect(url);
-  }
-
-  return response;
-}
+export { auth as middleware } from "@/auth";
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|auth/callback).*)"],
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|api/auth|login|register).*)"],
 };
 ```
 
-- [ ] **Step 5: Login page + server action**
+This redirects unauthenticated requests to `/login` for any route not matched by the exclusion list (NextAuth v5's `auth` export doubles as middleware and redirects to the `pages.signIn` path from Step 2 when there's no session).
 
-`app/login/actions.ts`:
+- [ ] **Step 5: Register page + action**
+
+`app/register/actions.ts`:
 
 ```ts
 "use server";
 
-import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { prisma } from "@/lib/prisma";
+import bcrypt from "bcryptjs";
 import { redirect } from "next/navigation";
 
-export async function signInWithEmail(formData: FormData) {
+export async function registerUser(formData: FormData) {
   const email = formData.get("email") as string;
-  const supabase = await createServerSupabaseClient();
+  const password = formData.get("password") as string;
 
-  const { error } = await supabase.auth.signInWithOtp({
-    email,
-    options: { emailRedirectTo: `${process.env.NEXT_PUBLIC_SITE_URL}/auth/callback` },
-  });
-
-  if (error) {
-    redirect(`/login?error=${encodeURIComponent(error.message)}`);
+  if (!email || !password || password.length < 8) {
+    redirect("/register?error=" + encodeURIComponent("Email y password (min 8 caracteres) requeridos"));
   }
 
-  redirect("/login?sent=1");
+  const existing = await prisma.user.findUnique({ where: { email } });
+  if (existing) {
+    redirect("/register?error=" + encodeURIComponent("Ese email ya esta registrado"));
+  }
+
+  const passwordHash = await bcrypt.hash(password, 10);
+  await prisma.user.create({ data: { email, passwordHash } });
+
+  redirect("/login?registered=1");
 }
 ```
 
-`app/login/page.tsx`:
+`app/register/page.tsx`:
 
 ```tsx
-import { signInWithEmail } from "./actions";
+import { registerUser } from "./actions";
 
-export default async function LoginPage({
+export default async function RegisterPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string; sent?: string }>;
+  searchParams: Promise<{ error?: string }>;
 }) {
-  const { error, sent } = await searchParams;
+  const { error } = await searchParams;
 
   return (
     <main className="mx-auto max-w-sm p-8">
-      <h1 className="text-xl font-semibold mb-4">Ingresar</h1>
-      {sent && <p className="text-sm text-green-600 mb-4">Revisa tu email para el link de acceso.</p>}
+      <h1 className="text-xl font-semibold mb-4">Crear cuenta</h1>
       {error && <p className="text-sm text-red-600 mb-4">{error}</p>}
-      <form action={signInWithEmail} className="flex flex-col gap-3">
-        <input
-          type="email"
-          name="email"
-          required
-          placeholder="tu@email.com"
-          className="border rounded px-3 py-2"
-        />
+      <form action={registerUser} className="flex flex-col gap-3">
+        <input type="email" name="email" required placeholder="tu@email.com" className="border rounded px-3 py-2" />
+        <input type="password" name="password" required minLength={8} placeholder="Password (min 8 caracteres)" className="border rounded px-3 py-2" />
         <button type="submit" className="bg-black text-white rounded px-3 py-2">
-          Enviar link de acceso
+          Registrarme
         </button>
       </form>
     </main>
@@ -460,26 +440,63 @@ export default async function LoginPage({
 }
 ```
 
-Uses Supabase magic-link (email OTP) auth — no password to manage.
+- [ ] **Step 6: Login page + action**
 
-- [ ] **Step 6: Auth callback route**
-
-`app/auth/callback/route.ts`:
+`app/login/actions.ts`:
 
 ```ts
-import { createServerSupabaseClient } from "@/lib/supabase/server";
-import { NextResponse } from "next/server";
+"use server";
 
-export async function GET(request: Request) {
-  const { searchParams, origin } = new URL(request.url);
-  const code = searchParams.get("code");
+import { signIn } from "@/auth";
+import { AuthError } from "next-auth";
+import { redirect } from "next/navigation";
 
-  if (code) {
-    const supabase = await createServerSupabaseClient();
-    await supabase.auth.exchangeCodeForSession(code);
+export async function loginWithCredentials(formData: FormData) {
+  try {
+    await signIn("credentials", {
+      email: formData.get("email"),
+      password: formData.get("password"),
+      redirectTo: "/",
+    });
+  } catch (err) {
+    if (err instanceof AuthError) {
+      redirect("/login?error=" + encodeURIComponent("Email o password incorrectos"));
+    }
+    throw err;
   }
+}
+```
 
-  return NextResponse.redirect(`${origin}/`);
+`app/login/page.tsx`:
+
+```tsx
+import { loginWithCredentials } from "./actions";
+import Link from "next/link";
+
+export default async function LoginPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ error?: string; registered?: string }>;
+}) {
+  const { error, registered } = await searchParams;
+
+  return (
+    <main className="mx-auto max-w-sm p-8">
+      <h1 className="text-xl font-semibold mb-4">Ingresar</h1>
+      {registered && <p className="text-sm text-green-600 mb-4">Cuenta creada, ya podes ingresar.</p>}
+      {error && <p className="text-sm text-red-600 mb-4">{error}</p>}
+      <form action={loginWithCredentials} className="flex flex-col gap-3">
+        <input type="email" name="email" required placeholder="tu@email.com" className="border rounded px-3 py-2" />
+        <input type="password" name="password" required placeholder="Password" className="border rounded px-3 py-2" />
+        <button type="submit" className="bg-black text-white rounded px-3 py-2">
+          Ingresar
+        </button>
+      </form>
+      <p className="text-sm mt-4">
+        No tenes cuenta? <Link href="/register" className="underline">Registrate</Link>
+      </p>
+    </main>
+  );
 }
 ```
 
@@ -489,13 +506,13 @@ export async function GET(request: Request) {
 npm run dev
 ```
 
-Visit `http://localhost:3000` — expect redirect to `/login` (no session). Submit real email, check inbox for magic link, click it, expect redirect to `/` while logged in (verify via a temporary `console.log` of `supabase.auth.getUser()` in `app/page.tsx`, remove after confirming).
+Visit `http://localhost:3000` — expect redirect to `/login` (no session). Go to `/register`, create an account, expect redirect to `/login?registered=1`. Log in with those credentials, expect redirect to `/` while logged in. Confirm `prisma.user.findMany()` (via a throwaway `npx tsx -e` one-liner, same pattern as Task 1 Step 6) shows the new user with a bcrypt hash (not plaintext) in `passwordHash`.
 
 - [ ] **Step 8: Commit**
 
 ```bash
-git add lib/supabase middleware.ts app/login app/auth
-git commit -m "feat: add Supabase Auth (magic link login) with route protection"
+git add auth.ts app/api/auth middleware.ts app/login app/register
+git commit -m "feat: add NextAuth Credentials login/register with route protection"
 ```
 
 ---
@@ -749,7 +766,7 @@ git commit -m "feat: add source/keyword/search/sort filters to job feed"
 - Modify: `app/page.tsx` (render status buttons per job)
 
 **Interfaces:**
-- Consumes: `createServerSupabaseClient()` from Task 3, `prisma` from Task 1.
+- Consumes: `auth()` from `auth.ts` (Task 3), `prisma` from Task 1.
 - Produces: `setJobStatus(jobId: string, status: JobStatusValue): Promise<void>` server action, exported from `app/jobs/actions.ts`.
 
 - [ ] **Step 1: Write the server action**
@@ -760,23 +777,20 @@ git commit -m "feat: add source/keyword/search/sort filters to job feed"
 "use server";
 
 import { prisma } from "@/lib/prisma";
-import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { auth } from "@/auth";
 import { JobStatusValue } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 
 export async function setJobStatus(jobId: string, status: JobStatusValue) {
-  const supabase = await createServerSupabaseClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const session = await auth();
 
-  if (!user) {
+  if (!session?.user) {
     throw new Error("Not authenticated");
   }
 
   await prisma.jobStatus.upsert({
-    where: { userId_jobId: { userId: user.id, jobId } },
-    create: { userId: user.id, jobId, status },
+    where: { userId_jobId: { userId: session.user.id, jobId } },
+    create: { userId: session.user.id, jobId, status },
     update: { status },
   });
 
@@ -853,20 +867,19 @@ export async function getJobs(filters: JobFilters = {}) {
 }
 ```
 
-And in `app/page.tsx`, fetch the user before calling `getJobs` and pass `userId`:
+And in `app/page.tsx`, fetch the session before calling `getJobs` and pass `userId`:
 
 ```tsx
-import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { auth } from "@/auth";
 
 // inside Home(), before getJobs call:
-const supabase = await createServerSupabaseClient();
-const { data: { user } } = await supabase.auth.getUser();
+const session = await auth();
 const jobs = await getJobs({
   source: params.source as JobSource | undefined,
   keyword: params.keyword || undefined,
   search: params.search || undefined,
   sort: params.sort === "oldest" ? "oldest" : "recent",
-  userId: user?.id,
+  userId: session?.user?.id,
 });
 ```
 
@@ -885,9 +898,9 @@ git commit -m "feat: add save/applied/discarded status per job via server action
 
 ## Definition of Done
 
-- `npx prisma db push` applied, schema live on Supabase.
+- `npx prisma db push` applied, schema live on Neon.
 - Seeded keywords + jobs visible.
-- Login via magic link works, unauthenticated users redirected to `/login`.
+- Register + login via email/password works, unauthenticated users redirected to `/login`.
 - Feed lists jobs, filterable by source/keyword/search, sortable by date.
 - Save/Applied/Discarded buttons persist per-user state.
 
