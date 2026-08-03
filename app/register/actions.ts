@@ -14,7 +14,7 @@ export async function registerUser(formData: FormData) {
 
   const existing = await prisma.user.findUnique({ where: { email } });
   if (existing) {
-    redirect("/register?error=" + encodeURIComponent("Ese email ya esta registrado"));
+    redirect("/register?error=" + encodeURIComponent("Ese email ya está registrado"));
   }
 
   const passwordHash = await bcrypt.hash(password, 10);

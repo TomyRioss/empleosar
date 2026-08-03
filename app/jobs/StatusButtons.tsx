@@ -32,6 +32,12 @@ const LABELS: Record<JobStatusValue, string> = {
   DISCARDED: "Descartar",
 };
 
+const ACTIVE_CLASS: Record<JobStatusValue, string> = {
+  SAVED: "bg-status-saved border-status-saved text-accent-ink",
+  APPLIED: "bg-status-applied border-status-applied text-accent-ink",
+  DISCARDED: "bg-status-discarded border-status-discarded text-accent-ink",
+};
+
 export function StatusButtons({
   jobId,
   isLoggedIn,
@@ -68,7 +74,9 @@ export function StatusButtons({
           key={s}
           type="button"
           onClick={() => handleClick(s)}
-          className={`text-xs border rounded px-2 py-1 ${status === s ? "bg-black text-white" : ""}`}
+          className={`text-xs font-medium border border-border rounded px-2 py-1 transition ${
+            status === s ? ACTIVE_CLASS[s] : "text-text-muted hover:text-text hover:border-text-muted"
+          }`}
         >
           {LABELS[s]}
         </button>

@@ -1,4 +1,5 @@
 import { registerUser } from "./actions";
+import Link from "next/link";
 
 export default async function RegisterPage({
   searchParams,
@@ -8,16 +9,55 @@ export default async function RegisterPage({
   const { error } = await searchParams;
 
   return (
-    <main className="mx-auto max-w-sm p-8">
-      <h1 className="text-xl font-semibold mb-4">Crear cuenta</h1>
-      {error && <p className="text-sm text-red-600 mb-4">{error}</p>}
+    <main className="mx-auto max-w-sm w-full p-8 mt-16">
+      <h1 className="font-display font-bold text-2xl text-text mb-1">
+        Empleos<span className="text-accent">.AR</span>
+      </h1>
+      <p className="font-mono text-[11px] uppercase tracking-widest text-text-muted mb-6">Crear cuenta</p>
+
+      {error && <p className="text-sm text-status-discarded mb-4">{error}</p>}
+
       <form action={registerUser} className="flex flex-col gap-3">
-        <input type="email" name="email" required placeholder="tu@email.com" className="border rounded px-3 py-2" />
-        <input type="password" name="password" required minLength={8} placeholder="Password (min 8 caracteres)" className="border rounded px-3 py-2" />
-        <button type="submit" className="bg-black text-white rounded px-3 py-2">
+        <div className="flex flex-col gap-1">
+          <label htmlFor="email" className="font-mono text-[11px] uppercase tracking-widest text-text-muted">
+            Email
+          </label>
+          <input
+            id="email"
+            type="email"
+            name="email"
+            required
+            placeholder="tu@email.com"
+            className="bg-surface border border-border rounded px-3 py-2 text-sm text-text focus:outline-none focus:ring-2 focus:ring-accent"
+          />
+        </div>
+        <div className="flex flex-col gap-1">
+          <label htmlFor="password" className="font-mono text-[11px] uppercase tracking-widest text-text-muted">
+            Password
+          </label>
+          <input
+            id="password"
+            type="password"
+            name="password"
+            required
+            minLength={8}
+            placeholder="Minimo 8 caracteres"
+            className="bg-surface border border-border rounded px-3 py-2 text-sm text-text focus:outline-none focus:ring-2 focus:ring-accent"
+          />
+        </div>
+        <button
+          type="submit"
+          className="bg-accent text-accent-ink font-medium rounded px-3 py-2 text-sm hover:brightness-110 transition mt-1"
+        >
           Registrarme
         </button>
       </form>
+      <p className="text-sm text-text-muted mt-4">
+        Ya tenés cuenta?{" "}
+        <Link href="/login" className="text-accent underline underline-offset-4">
+          Ingresá
+        </Link>
+      </p>
     </main>
   );
 }

@@ -1,26 +1,60 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --bg: #14171b;
+  --surface: #1d2127;
+  --surface-alt: #262b33;
+  --border: #333a44;
+  --text: #ece8dd;
+  --text-muted: #9aa0ab;
+  --accent: #e8a33d;
+  --accent-ink: #1a1200;
+  --status-saved: #e8a33d;
+  --status-applied: #4fa98a;
+  --status-discarded: #c1554a;
+  --source-linkedin: #4c8dff;
+  --source-computrabajo: #ff8a3d;
+  --source-zonajobs: #c97bff;
+  --source-reddit: #ff5d3d;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-alt: var(--surface-alt);
+  --color-border: var(--border);
+  --color-text: var(--text);
+  --color-text-muted: var(--text-muted);
+  --color-accent: var(--accent);
+  --color-accent-ink: var(--accent-ink);
+  --color-status-saved: var(--status-saved);
+  --color-status-applied: var(--status-applied);
+  --color-status-discarded: var(--status-discarded);
+  --color-source-linkedin: var(--source-linkedin);
+  --color-source-computrabajo: var(--source-computrabajo);
+  --color-source-zonajobs: var(--source-zonajobs);
+  --color-source-reddit: var(--source-reddit);
+  --font-display: var(--font-space-grotesk);
+  --font-sans: var(--font-inter);
+  --font-mono: var(--font-plex-mono);
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans), system-ui, sans-serif;
+}
+
+/* Rubber-stamp badge for a job's source: rotated, dashed, mono-uppercase. */
+.stamp {
+  font-family: var(--font-mono), monospace;
+  transform: rotate(-2deg);
+  display: inline-block;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+  }
 }

@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "scrape": "tsx --env-file=.env.local scraper/index.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
@@ -15,6 +16,7 @@
     "@prisma/adapter-pg": "^7.9.1",
     "@prisma/client": "^7.9.1",
     "bcryptjs": "^3.0.3",
+    "cheerio": "^1.2.0",
     "next": "16.2.12",
     "next-auth": "^5.0.0-beta.32",
     "react": "19.2.4",
@@ -29,6 +31,7 @@
     "dotenv": "^17.4.2",
     "eslint": "^9",
     "eslint-config-next": "16.2.12",
+    "playwright": "^1.62.1",
     "prisma": "^7.9.1",
     "tailwindcss": "^4",
     "tsx": "^4.23.5",
