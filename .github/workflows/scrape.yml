@@ -1,0 +1,29 @@
+name: Scrape Jobs
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - run: npm ci
+
+      - run: npx prisma generate
+
+      - run: npx playwright install
+
+      - name: Run scraper
+        run: npm run scrape
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}

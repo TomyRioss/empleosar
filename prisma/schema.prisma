@@ -20,21 +20,20 @@ enum JobStatusValue {
 }
 
 model Job {
-  id             String      @id @default(cuid())
-  source         JobSource
-  externalId     String
-  title          String
-  company        String?
-  url            String
-  location       String?
-  postedAt       DateTime?
-  keywordMatched String
-  scrapedAt      DateTime    @default(now())
-  statuses       JobStatus[]
+  id         String      @id @default(cuid())
+  source     JobSource
+  externalId String
+  title      String
+  company    String?
+  url        String
+  location   String?
+  postedAt   DateTime?
+  scrapedAt  DateTime    @default(now())
+  statuses   JobStatus[]
+  keywords   JobKeyword[]
 
   @@unique([source, externalId])
   @@index([postedAt])
-  @@index([source, keywordMatched])
 }
 
 model User {
@@ -58,7 +57,18 @@ model JobStatus {
 }
 
 model Keyword {
-  id     String  @id @default(cuid())
-  term   String  @unique
-  active Boolean @default(true)
+  id     String       @id @default(cuid())
+  term   String       @unique
+  active Boolean      @default(true)
+  jobs   JobKeyword[]
+}
+
+model JobKeyword {
+  id        String   @id @default(cuid())
+  jobId     String
+  keywordId String
+  job       Job      @relation(fields: [jobId], references: [id])
+  keyword   Keyword  @relation(fields: [keywordId], references: [id])
+
+  @@unique([jobId, keywordId])
 }

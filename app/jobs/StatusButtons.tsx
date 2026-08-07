@@ -3,6 +3,8 @@
 import { useState, useSyncExternalStore } from "react";
 import { setJobStatus } from "@/app/jobs/actions";
 import { JobStatusValue } from "@prisma/client";
+import { FaRegBookmark, FaBookmark, FaRegCircleCheck, FaCircleCheck, FaRegCircleXmark, FaCircleXmark } from "react-icons/fa6";
+import type { IconType } from "react-icons";
 
 const GUEST_STORAGE_KEY = "guestJobStatus";
 
@@ -32,10 +34,23 @@ const LABELS: Record<JobStatusValue, string> = {
   DISCARDED: "Descartar",
 };
 
+const ICON: Record<JobStatusValue, { off: IconType; on: IconType }> = {
+  SAVED: { off: FaRegBookmark, on: FaBookmark },
+  APPLIED: { off: FaRegCircleCheck, on: FaCircleCheck },
+  DISCARDED: { off: FaRegCircleXmark, on: FaCircleXmark },
+};
+
+// Pastel by default (color/10 fill), deeper tint when active — never plain text/border.
+const IDLE_CLASS: Record<JobStatusValue, string> = {
+  SAVED: "bg-status-saved/10 border-status-saved/25 text-status-saved hover:bg-status-saved/20",
+  APPLIED: "bg-status-applied/10 border-status-applied/25 text-status-applied hover:bg-status-applied/20",
+  DISCARDED: "bg-status-discarded/10 border-status-discarded/25 text-status-discarded hover:bg-status-discarded/20",
+};
+
 const ACTIVE_CLASS: Record<JobStatusValue, string> = {
-  SAVED: "bg-status-saved border-status-saved text-accent-ink",
-  APPLIED: "bg-status-applied border-status-applied text-accent-ink",
-  DISCARDED: "bg-status-discarded border-status-discarded text-accent-ink",
+  SAVED: "bg-status-saved/25 border-status-saved text-status-saved",
+  APPLIED: "bg-status-applied/25 border-status-applied text-status-applied",
+  DISCARDED: "bg-status-discarded/25 border-status-discarded text-status-discarded",
 };
 
 export function StatusButtons({
@@ -69,18 +84,23 @@ export function StatusButtons({
 
   return (
     <div className="flex gap-2 mt-3">
-      {(Object.keys(LABELS) as JobStatusValue[]).map((s) => (
-        <button
-          key={s}
-          type="button"
-          onClick={() => handleClick(s)}
-          className={`text-xs font-medium border border-border rounded px-2 py-1 transition ${
-            status === s ? ACTIVE_CLASS[s] : "text-text-muted hover:text-text hover:border-text-muted"
-          }`}
-        >
-          {LABELS[s]}
-        </button>
-      ))}
+      {(Object.keys(LABELS) as JobStatusValue[]).map((s) => {
+        const active = status === s;
+        const Icon = active ? ICON[s].on : ICON[s].off;
+        return (
+          <button
+            key={s}
+            type="button"
+            onClick={() => handleClick(s)}
+            className={`inline-flex items-center gap-1.5 text-xs font-medium border rounded-full px-2.5 py-1 transition ${
+              active ? ACTIVE_CLASS[s] : IDLE_CLASS[s]
+            }`}
+          >
+            <Icon className="shrink-0" size={12} />
+            {LABELS[s]}
+          </button>
+        );
+      })}
     </div>
   );
 }

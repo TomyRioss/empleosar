@@ -7,4 +7,11 @@ export type RawJob = {
   postedAt?: Date;
 };
 
-export type SourceScraper = (keyword: string) => Promise<RawJob[]>;
+export type ScraperSession = {
+  scrape: (keyword: string) => Promise<RawJob[]>;
+  dispose: () => Promise<void>;
+};
+
+// A source scraper opens one session per run (e.g. one browser launch) and
+// reuses it across every keyword, instead of paying setup cost per keyword.
+export type SourceScraper = () => Promise<ScraperSession>;

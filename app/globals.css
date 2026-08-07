@@ -1,12 +1,12 @@
 @import "tailwindcss";
 
 :root {
-  --bg: #14171b;
-  --surface: #1d2127;
-  --surface-alt: #262b33;
-  --border: #333a44;
-  --text: #ece8dd;
-  --text-muted: #9aa0ab;
+  --bg: #ffffff;
+  --surface: #f7f5f0;
+  --surface-alt: #efece4;
+  --border: #ddd6c8;
+  --text: #1a1200;
+  --text-muted: #6b6555;
   --accent: #e8a33d;
   --accent-ink: #1a1200;
   --status-saved: #e8a33d;
@@ -50,6 +50,39 @@ body {
   font-family: var(--font-mono), monospace;
   transform: rotate(-2deg);
   display: inline-block;
+}
+
+select {
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%239aa0ab' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.75rem center;
+  padding-right: 2.5rem;
+}
+
+select optgroup {
+  font-family: var(--font-mono), monospace;
+  font-size: 10px;
+  font-weight: 400;
+  font-style: normal;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  padding: 0.5rem 0 0.25rem;
+  border-top: 1px solid var(--border);
+  margin-top: 0.5rem;
+}
+
+select optgroup:first-of-type {
+  border-top: none;
+  margin-top: 0;
+}
+
+select optgroup option {
+  font-family: var(--font-sans), system-ui, sans-serif;
+  font-size: 14px;
+  padding-left: 1.5rem;
+  color: var(--text);
 }
 
 @media (prefers-reduced-motion: reduce) {
