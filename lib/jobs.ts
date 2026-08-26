@@ -27,7 +27,12 @@ export async function getJobs(filters: JobFilters = {}) {
         ? { some: { keyword: { term: filters.keyword } } }
         : undefined,
     },
-    orderBy: { postedAt: filters.sort === "oldest" ? "asc" : "desc" },
+    orderBy: {
+      postedAt:
+        filters.sort === "oldest"
+          ? { sort: "asc", nulls: "last" }
+          : { sort: "desc", nulls: "last" },
+    },
     skip: (page - 1) * pageSize,
     take: pageSize,
     include: {

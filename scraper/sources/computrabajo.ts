@@ -33,7 +33,7 @@ async function fetchPage(url: string): Promise<RawJob[]> {
       .find("p, span, div")
       .toArray()
       .map((e) => $(e).text().trim())
-      .find((t) => /hace\s/i.test(t)) || "";
+      .find((t) => /hace\s|hoy\b|ayer\b/i.test(t)) || "";
 
     pageJobs.push({
       externalId,

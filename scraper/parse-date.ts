@@ -22,6 +22,8 @@ export function parseRelativeDate(text: string): Date | undefined {
     { regex: /(\d+)\s*(semanas?)\b/i, fn: (m: RegExpMatchArray) => parseInt(m[1]) * 604800 },
     { regex: /un\s+mes\b/i, seconds: 2592000 },
     { regex: /(\d+)\s*(meses?)\b/i, fn: (m: RegExpMatchArray) => parseInt(m[1]) * 2592000 },
+    { regex: /hoy\b|today/i, seconds: 0 },
+    { regex: /ayer\b/i, seconds: 86400 },
   ];
 
   const en = [
