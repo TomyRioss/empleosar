@@ -39,4 +39,4 @@ jobs:
         run: npm run scrape
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          SCRAPE_SHARD_COUNT: "6"
+          SCRAPE_SHARD_COUNT: "3"
