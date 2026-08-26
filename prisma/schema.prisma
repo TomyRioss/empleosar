@@ -27,21 +27,68 @@ model Job {
   company    String?
   url        String
   location   String?
+  description String?
+  aiSummary   String?
   postedAt   DateTime?
   scrapedAt  DateTime    @default(now())
   statuses   JobStatus[]
   keywords   JobKeyword[]
+  generatedCvs GeneratedCv[]
 
   @@unique([source, externalId])
   @@index([postedAt])
 }
 
 model User {
-  id           String      @id @default(cuid())
-  email        String      @unique
+  id           String        @id @default(cuid())
+  email        String        @unique
   passwordHash String
-  createdAt    DateTime    @default(now())
+  createdAt    DateTime      @default(now())
   statuses     JobStatus[]
+  profile      Profile?
+  cvFiles      CvFile[]
+  generatedCvs GeneratedCv[]
+}
+
+model Profile {
+  id             String   @id @default(cuid())
+  userId         String   @unique
+  firstName      String
+  lastName       String
+  phone          String?
+  province       String
+  city           String
+  street         String?
+  showStreetInCv Boolean  @default(true)
+  summary        String?
+  languages      Json     @default("[]")
+  skills         Json     @default("[]")
+  experience     Json     @default("[]")
+  education      Json     @default("[]")
+  certifications Json     @default("[]")
+  updatedAt      DateTime @updatedAt
+  user           User     @relation(fields: [userId], references: [id])
+}
+
+model CvFile {
+  id         String   @id @default(cuid())
+  userId     String
+  filename   String
+  mimeType   String
+  data       Bytes
+  uploadedAt DateTime @default(now())
+  user       User     @relation(fields: [userId], references: [id])
+}
+
+model GeneratedCv {
+  id        String   @id @default(cuid())
+  userId    String
+  jobId     String
+  filename  String
+  data      Bytes
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id])
+  job       Job      @relation(fields: [jobId], references: [id])
 }
 
 model JobStatus {
@@ -71,4 +118,14 @@ model JobKeyword {
   keyword   Keyword  @relation(fields: [keywordId], references: [id])
 
   @@unique([jobId, keywordId])
+}
+
+model ScrapeRun {
+  id             String    @id @default(cuid())
+  startedAt      DateTime  @default(now())
+  finishedAt     DateTime?
+  shard          String?
+  totalFound     Int       @default(0)
+  totalCreated   Int       @default(0)
+  totalConnected Int       @default(0)
 }

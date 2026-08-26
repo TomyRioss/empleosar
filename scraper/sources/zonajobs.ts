@@ -3,6 +3,7 @@ import StealthPlugin from "puppeteer-extra-plugin-stealth";
 import * as cheerio from "cheerio";
 import type { RawJob, ScraperSession, SourceScraper } from "../types";
 import { parseRelativeDate } from "../parse-date";
+import { htmlToText } from "../html-to-text";
 
 chromium.use(StealthPlugin());
 
@@ -93,6 +94,33 @@ export const scrapeZonajobs: SourceScraper = async (): Promise<ScraperSession> =
         }
 
         return allJobs;
+      } finally {
+        await page.close();
+      }
+    },
+    // The detail page embeds a non-standard ld+json blob shaped like
+    // {title, description} — description is an HTML fragment, not schema.org.
+    fetchDescription: async (url: string): Promise<string | undefined> => {
+      const page = await browser.newPage();
+      try {
+        await page.goto(url, { waitUntil: "domcontentloaded", timeout: 30000 });
+        await page.waitForTimeout(3000);
+
+        const html = await page.content();
+        const $ = cheerio.load(html);
+        let description: string | undefined;
+
+        $('script[type="application/ld+json"]').each((_, el) => {
+          if (description) return;
+          try {
+            const data = JSON.parse($(el).html() ?? "");
+            if (typeof data?.description === "string") description = data.description;
+          } catch {
+            // Not every ld+json block on the page is this shape; skip malformed ones.
+          }
+        });
+
+        return description ? htmlToText(description) : undefined;
       } finally {
         await page.close();
       }

@@ -9,6 +9,9 @@ export type RawJob = {
 
 export type ScraperSession = {
   scrape: (keyword: string) => Promise<RawJob[]>;
+  // Fetches the full posting text from a job's detail page. Returns
+  // undefined if the page has no extractable description.
+  fetchDescription: (url: string) => Promise<string | undefined>;
   dispose: () => Promise<void>;
 };
 

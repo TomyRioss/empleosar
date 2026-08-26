@@ -1,6 +1,7 @@
 import * as cheerio from "cheerio";
 import type { RawJob, ScraperSession, SourceScraper } from "../types";
 import { parseRelativeDate } from "../parse-date";
+import { htmlToText } from "../html-to-text";
 
 const MAX_PAGES = 10;
 const PAGE_BATCH = 2;
@@ -83,6 +84,17 @@ export const scrapeComputrabajo: SourceScraper = async (): Promise<ScraperSessio
     }
 
     return allJobs;
+  },
+  fetchDescription: async (url: string): Promise<string | undefined> => {
+    const res = await fetch(url, {
+      headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) trabajoteca-hub/1.0" },
+    });
+    if (!res.ok) return undefined;
+
+    const html = await res.text();
+    const $ = cheerio.load(html);
+    const raw = $("p.mbB").first().html();
+    return raw ? htmlToText(raw) : undefined;
   },
   dispose: async () => {},
 });

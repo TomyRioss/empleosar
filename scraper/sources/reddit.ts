@@ -1,6 +1,7 @@
 import { chromium } from "playwright-extra";
 import StealthPlugin from "puppeteer-extra-plugin-stealth";
 import type { RawJob, ScraperSession, SourceScraper } from "../types";
+import { htmlToText } from "../html-to-text";
 
 chromium.use(StealthPlugin());
 
@@ -69,6 +70,19 @@ export const scrapeReddit: SourceScraper = async (): Promise<ScraperSession> => 
               postedAt: p.timestamp ? new Date(p.timestamp) : undefined,
             }),
           );
+      } finally {
+        await page.close();
+      }
+    },
+    fetchDescription: async (url: string): Promise<string | undefined> => {
+      const page = await browser.newPage();
+      try {
+        await page.goto(url, { waitUntil: "domcontentloaded", timeout: 30000 });
+        await page.waitForTimeout(3000);
+
+        const body = await page.$eval('[slot="text-body"]', (el) => el.textContent ?? "").catch(() => "");
+        const cleaned = htmlToText(body).replace(/\n?Read more\s*$/i, "").trim();
+        return cleaned || undefined;
       } finally {
         await page.close();
       }

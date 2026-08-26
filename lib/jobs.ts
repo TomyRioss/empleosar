@@ -52,6 +52,12 @@ export async function getJobCount(filters: Omit<JobFilters, "sort" | "userId" | 
 }
 
 export async function getLastScrapedAt() {
+  const run = await prisma.scrapeRun.findFirst({
+    where: { finishedAt: { not: null } },
+    orderBy: { finishedAt: "desc" },
+    select: { finishedAt: true },
+  });
+  if (run?.finishedAt) return run.finishedAt;
   const result = await prisma.job.aggregate({
     _max: { scrapedAt: true },
   });

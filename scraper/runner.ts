@@ -1,6 +1,6 @@
 import { prisma } from "../lib/prisma";
 import { JobSource } from "@prisma/client";
-import type { RawJob, SourceScraper } from "./types";
+import type { RawJob, ScraperSession, SourceScraper } from "./types";
 
 export type ScrapeResult = {
   source: JobSource;
@@ -19,6 +19,38 @@ export type LogEntry =
 
 const KEYWORD_TIMEOUT_MS = 90_000;
 const DISPOSE_TIMEOUT_MS = 15_000;
+const DESCRIPTION_TIMEOUT_MS = 20_000;
+const DESCRIPTION_CONCURRENCY = 3;
+const MAX_JOB_AGE_MS = 3 * 24 * 60 * 60 * 1000;
+
+async function mapWithConcurrency<T>(items: T[], limit: number, fn: (item: T) => Promise<void>): Promise<void> {
+  let index = 0;
+  async function worker() {
+    while (index < items.length) {
+      const item = items[index++];
+      await fn(item);
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+}
+
+// Job has no onDelete cascade to JobStatus/JobKeyword/GeneratedCv, so children
+// must be purged before the parent row.
+export async function purgeOldJobs(): Promise<number> {
+  const cutoff = new Date(Date.now() - MAX_JOB_AGE_MS);
+  const stale = await prisma.job.findMany({
+    where: { scrapedAt: { lt: cutoff } },
+    select: { id: true },
+  });
+  if (stale.length === 0) return 0;
+
+  const ids = stale.map((j) => j.id);
+  await prisma.jobStatus.deleteMany({ where: { jobId: { in: ids } } });
+  await prisma.jobKeyword.deleteMany({ where: { jobId: { in: ids } } });
+  await prisma.generatedCv.deleteMany({ where: { jobId: { in: ids } } });
+  await prisma.job.deleteMany({ where: { id: { in: ids } } });
+  return ids.length;
+}
 
 // A hung page.goto/evaluate (dead browser, stalled connection) has no
 // timeout of its own and would otherwise stall the whole source's keyword
@@ -46,8 +78,8 @@ async function persistJobs(
   source: JobSource,
   keywordId: string,
   rawJobs: RawJob[],
-): Promise<{ created: number; connected: number }> {
-  if (rawJobs.length === 0) return { created: 0, connected: 0 };
+): Promise<{ created: number; connected: number; createdRows: { id: string; url: string }[] }> {
+  if (rawJobs.length === 0) return { created: 0, connected: 0, createdRows: [] };
 
   const externalIds = rawJobs.map((j) => j.externalId);
   const existing = await prisma.job.findMany({
@@ -60,9 +92,10 @@ async function persistJobs(
   const toConnect = existing.filter((j) => j.keywords.length === 0);
 
   let created = 0;
+  let createdRows: { id: string; url: string }[] = [];
 
   if (newJobs.length > 0) {
-    const createdRows = await prisma.job.createManyAndReturn({
+    createdRows = await prisma.job.createManyAndReturn({
       data: newJobs.map((j) => ({
         source,
         externalId: j.externalId,
@@ -73,7 +106,7 @@ async function persistJobs(
         postedAt: j.postedAt,
       })),
       skipDuplicates: true,
-      select: { id: true },
+      select: { id: true, url: true },
     });
     created = createdRows.length;
 
@@ -92,7 +125,46 @@ async function persistJobs(
     });
   }
 
-  return { created, connected: toConnect.length };
+  return { created, connected: toConnect.length, createdRows };
+}
+
+// Best-effort: a job that fails to yield a description just stays without
+// one (visible on the detail page as "sin descripción"), never blocks the run.
+async function fetchDescriptionsForNewJobs(
+  session: ScraperSession,
+  createdRows: { id: string; url: string }[],
+): Promise<void> {
+  await mapWithConcurrency(createdRows, DESCRIPTION_CONCURRENCY, async (job) => {
+    try {
+      const description = await withTimeout(
+        session.fetchDescription(job.url),
+        DESCRIPTION_TIMEOUT_MS,
+        `description ${job.url}`,
+      );
+      if (description) {
+        await prisma.job.update({ where: { id: job.id }, data: { description } });
+      }
+    } catch {
+      // swallow — description is best-effort, not worth failing the scrape over
+    }
+  });
+}
+
+const SHARD_SLOT_MS = 900_000;
+
+type KeywordRow = Awaited<ReturnType<typeof prisma.keyword.findMany>>[number];
+
+function selectKeywordShard(keywords: KeywordRow[]): { keywords: KeywordRow[]; label: string } {
+  const count = Number(process.env.SCRAPE_SHARD_COUNT);
+  if (!Number.isInteger(count) || count < 2) return { keywords, label: "" };
+  const explicit = Number(process.env.SCRAPE_SHARD_INDEX);
+  const index = Number.isInteger(explicit) && explicit >= 0 && explicit < count
+    ? explicit
+    : Math.floor(Date.now() / SHARD_SLOT_MS) % count;
+  return {
+    keywords: keywords.filter((_, i) => i % count === index),
+    label: ` (shard ${index + 1}/${count})`,
+  };
 }
 
 export async function runScrapers(
@@ -100,7 +172,8 @@ export async function runScrapers(
   onLog?: (entry: LogEntry) => void | Promise<void>,
   signal?: AbortSignal,
 ): Promise<ScrapeResult[]> {
-  const keywords = await prisma.keyword.findMany({ where: { active: true } });
+  const allKeywords = await prisma.keyword.findMany({ where: { active: true } });
+  const { keywords, label } = selectKeywordShard(allKeywords);
   const results: ScrapeResult[] = [];
 
   const log = (entry: LogEntry) => {
@@ -108,7 +181,14 @@ export async function runScrapers(
   };
 
   const sourceEntries = Object.entries(sources) as [JobSource, SourceScraper][];
-  log({ type: "start", message: `Scrape for ${keywords.length} keywords across ${sourceEntries.length} sources` });
+  log({
+    type: "start",
+    message: `Scrape${label}: ${keywords.length} of ${allKeywords.length} keywords across ${sourceEntries.length} sources`,
+  });
+
+  const run = await prisma.scrapeRun
+    .create({ data: { shard: label || null } })
+    .catch(() => null);
 
   // Each source opens one session (e.g. one browser launch) reused across all
   // its keywords, and runs its keyword queue sequentially within that session
@@ -122,7 +202,8 @@ export async function runScrapers(
 
         try {
           const rawJobs = await withTimeout(session.scrape(term), KEYWORD_TIMEOUT_MS, `${source} ${term}`);
-          const { created, connected } = await persistJobs(source, keywordId, rawJobs);
+          const { created, connected, createdRows } = await persistJobs(source, keywordId, rawJobs);
+          await fetchDescriptionsForNewJobs(session, createdRows);
 
           consecutiveFailures = 0;
           log({ type: "progress", source, keyword: term, found: rawJobs.length, created, connected });
@@ -151,6 +232,11 @@ export async function runScrapers(
 
   await Promise.all(sourceEntries.map(([source, createScraper]) => runSource(source, createScraper)));
 
+  const purged = await purgeOldJobs();
+  if (purged > 0) {
+    log({ type: "start", message: `Purged ${purged} job(s) older than 3 days` });
+  }
+
   const totalCreated = results.reduce((sum, r) => sum + r.created, 0);
   const totalConnected = results.reduce((sum, r) => sum + r.connected, 0);
   log({
@@ -159,6 +245,20 @@ export async function runScrapers(
     totalConnected,
     stopped: signal?.aborted ?? false,
   });
+
+  if (run) {
+    await prisma.scrapeRun
+      .update({
+        where: { id: run.id },
+        data: {
+          finishedAt: new Date(),
+          totalFound: results.reduce((sum, r) => sum + r.count, 0),
+          totalCreated,
+          totalConnected,
+        },
+      })
+      .catch(() => {});
+  }
 
   return results;
 }
