@@ -1,40 +1,14 @@
 import { getJobs, getJobCount, getLastScrapedAt } from "@/lib/jobs";
 import { prisma } from "@/lib/prisma";
-import { auth, signOut } from "@/auth";
+import { auth } from "@/auth";
 import { StatusButtons } from "@/app/jobs/StatusButtons";
-import { RunScrapeButton } from "@/app/jobs/RunScrapeButton";
 import { KeywordSelect } from "@/app/components/KeywordSelect";
 import { getKeywordCategory, getKeywordCategoryIcon } from "@/app/components/keywordCategories";
 import { JobSource } from "@prisma/client";
 import Link from "next/link";
 import { SortSelect } from "@/app/components/SortSelect";
-
-const SOURCE_COLOR: Record<JobSource, string> = {
-  LINKEDIN: "border-source-linkedin/40",
-  COMPUTRABAJO: "border-source-computrabajo/40",
-  ZONAJOBS: "border-source-zonajobs/40",
-  REDDIT: "border-source-reddit/40",
-};
-
-const SOURCE_LOGO: Record<JobSource, string> = {
-  LINKEDIN: "/logos/linkedin.png",
-  COMPUTRABAJO: "/logos/computrabajo.png",
-  ZONAJOBS: "/logos/zonajobs.png",
-  REDDIT: "/logos/reddit.png",
-};
-
-function timeAgo(date: Date | null): string {
-  if (!date) return "nunca";
-  const seconds = Math.floor((Date.now() - date.getTime()) / 1000);
-  if (seconds < 60) return "hace unos segundos";
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `hace ${minutes} min${minutes > 1 ? "s" : ""}`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `hace ${hours} hr${hours > 1 ? "s" : ""}`;
-  const days = Math.floor(hours / 24);
-  if (days < 30) return `hace ${days} día${days > 1 ? "s" : ""}`;
-  return date.toLocaleDateString("es-AR", { day: "numeric", month: "short" });
-}
+import { GenerateCvButton } from "@/app/cv/GenerateCvButton";
+import { SOURCE_COLOR, SOURCE_LOGO, timeAgo } from "@/lib/jobDisplay";
 
 function pageHref(
   params: { source?: string; keyword?: string; search?: string; sort?: string },
@@ -86,71 +60,21 @@ export default async function Home({
   const totalPages = Math.max(1, Math.ceil(jobCount / pageSize));
   const lastScrapedAt = await getLastScrapedAt();
   const keywords = await prisma.keyword.findMany({ where: { active: true } });
+  const generatedCvByJob = new Map<string, string>();
+  if (session?.user) {
+    const generatedCvs = await prisma.generatedCv.findMany({
+      where: { userId: session.user.id, jobId: { in: jobs.map((j) => j.id) } },
+      orderBy: { createdAt: "desc" },
+      select: { id: true, jobId: true },
+    });
+    for (const cv of generatedCvs) {
+      if (!generatedCvByJob.has(cv.jobId)) generatedCvByJob.set(cv.jobId, cv.id);
+    }
+  }
 
   return (
     <>
-      <header className="border-b border-border bg-surface-alt">
-        <div className="mx-auto max-w-5xl px-6 py-4 flex justify-between items-center gap-4">
-          <Link href="/" className="shrink-0">
-            <h1 className="font-display font-bold text-2xl sm:text-3xl tracking-tight text-text">
-              Empleos<span className="text-accent">.AR</span>
-            </h1>
-            <p className="font-mono text-[11px] uppercase tracking-widest text-text-muted mt-0.5">
-              Bolsin de avisos — mercado argentino
-            </p>
-          </Link>
-
-          <form
-            method="get"
-            className="hidden md:flex items-center flex-1 max-w-md mx-4"
-          >
-            <div className="relative w-full">
-              <input
-                type="text"
-                name="search"
-                defaultValue={params.search}
-                placeholder="Buscar puesto, empresa..."
-                className="w-full bg-bg border border-border rounded-full pl-4 pr-10 py-2 text-sm text-text placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-accent"
-              />
-              <button
-                type="submit"
-                className="absolute right-1.5 top-1/2 -translate-y-1/2 text-text-muted hover:text-text p-1.5"
-                aria-label="Buscar"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <circle cx="11" cy="11" r="8" />
-                  <path d="m21 21-4.3-4.3" />
-                </svg>
-              </button>
-            </div>
-            {params.source && <input type="hidden" name="source" value={params.source} />}
-            {params.keyword && <input type="hidden" name="keyword" value={params.keyword} />}
-            {params.sort && <input type="hidden" name="sort" value={params.sort} />}
-          </form>
-
-          <div className="flex items-center gap-3 shrink-0">
-            {process.env.NODE_ENV === "development" && <RunScrapeButton />}
-            {session?.user ? (
-              <form
-                action={async () => {
-                  "use server";
-                  await signOut({ redirectTo: "/" });
-                }}
-              >
-                <button type="submit" className="text-sm text-text-muted hover:text-text underline underline-offset-4">
-                  Salir
-                </button>
-              </form>
-            ) : (
-              <Link href="/login" className="text-sm text-text-muted hover:text-text underline underline-offset-4">
-                Ingresar
-              </Link>
-            )}
-          </div>
-        </div>
-      </header>
-
-      <main className="mx-auto max-w-5xl w-full px-6 py-8 grid grid-cols-1 md:grid-cols-[220px_1fr] gap-8">
+      <main className="mx-auto max-w-7xl w-full px-6 py-8 grid grid-cols-1 md:grid-cols-[260px_1fr] gap-8">
         <form
           method="get"
           className="flex flex-col gap-4 bg-surface border border-border rounded-lg p-4 h-fit md:sticky md:top-8"
@@ -256,7 +180,9 @@ export default async function Home({
                         </span>
                       );
                     })()}
-                    <h2 className="font-display font-medium text-lg text-text truncate">{job.title}</h2>
+                    <Link href={`/jobs/${job.id}`} className="hover:underline">
+                      <h2 className="font-display font-medium text-lg text-text truncate">{job.title}</h2>
+                    </Link>
                     <p className="text-sm text-text-muted mt-0.5">
                       {job.company} — {job.location}
                     </p>
@@ -292,11 +218,18 @@ export default async function Home({
                     </div>
                   </div>
                 </div>
-                <StatusButtons
-                  jobId={job.id}
-                  isLoggedIn={!!session?.user}
-                  initialStatus={job.statuses[0]?.status ?? null}
-                />
+                <div className="flex items-center justify-between gap-3">
+                  <StatusButtons
+                    jobId={job.id}
+                    isLoggedIn={!!session?.user}
+                    initialStatus={job.statuses[0]?.status ?? null}
+                  />
+                  <GenerateCvButton
+                    jobId={job.id}
+                    isLoggedIn={!!session?.user}
+                    initialCvId={generatedCvByJob.get(job.id) ?? null}
+                  />
+                </div>
               </li>
             ))}
           </ul>
