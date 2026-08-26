@@ -5,6 +5,7 @@ import bcrypt from "bcryptjs";
 import { redirect } from "next/navigation";
 import { Prisma } from "@prisma/client";
 import type { ExperienceEntry, EducationEntry } from "@/lib/profileTypes";
+import { analyzeProfileSources, type ExtractedProfile } from "@/lib/extractProfile";
 
 export type RegisterPayload = {
   email: string;
@@ -24,6 +25,31 @@ export type RegisterPayload = {
 };
 
 export type RegisterResult = { error: string } | void;
+
+export type AnalyzeResult =
+  | { error: string }
+  | { profile: ExtractedProfile; warnings: string[] };
+
+export async function analyzeCvSources(formData: FormData): Promise<AnalyzeResult> {
+  const files: { name: string; buffer: ArrayBuffer }[] = [];
+  for (const entry of formData.getAll("files")) {
+    if (entry instanceof File && entry.size > 0) {
+      files.push({ name: entry.name, buffer: await entry.arrayBuffer() });
+    }
+  }
+  const links = formData
+    .getAll("links")
+    .flatMap((v) => (typeof v === "string" ? v.split(/\r?\n/) : []))
+    .map((l) => l.trim())
+    .filter((l) => l.length > 3 && /^https?:\/\//i.test(l));
+
+  try {
+    const { profile, warnings } = await analyzeProfileSources(files, links);
+    return { profile, warnings };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "No se pudo analizar las fuentes" };
+  }
+}
 
 export async function registerUser(payload: RegisterPayload): Promise<RegisterResult> {
   const email = payload.email?.trim().toLowerCase();

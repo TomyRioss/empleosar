@@ -3,12 +3,13 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { FaTrash, FaPlus, FaArrowLeft, FaArrowRight } from "react-icons/fa6";
-import { registerUser } from "./actions";
+import { FaTrash, FaPlus, FaArrowLeft, FaArrowRight, FaWandMagicSparkles, FaUpload, FaCheck } from "react-icons/fa6";
+import { registerUser, analyzeCvSources } from "./actions";
 import { StepIndicator } from "./StepIndicator";
 import type { ExperienceEntry, EducationEntry } from "@/lib/profileTypes";
+import type { ExtractedProfile } from "@/lib/extractProfile";
 
-const STEP_LABELS = ["Cuenta", "Datos", "Experiencia", "Educación", "Perfil"];
+const STEP_LABELS = ["Cuenta", "Importar", "Datos", "Experiencia", "Educación", "Perfil"];
 
 const EMPTY_EXPERIENCE: ExperienceEntry = { title: "", company: "", startDate: "", endDate: "", description: "" };
 const EMPTY_EDUCATION: EducationEntry = { institution: "", degree: "", startDate: "", endDate: "", description: "" };
@@ -60,6 +61,13 @@ export function RegisterWizard() {
   const [skills, setSkills] = useState("");
   const [certifications, setCertifications] = useState("");
 
+  const [cvFiles, setCvFiles] = useState<File[]>([]);
+  const [linksText, setLinksText] = useState("");
+  const [analyzing, setAnalyzing] = useState(false);
+  const [importWarnings, setImportWarnings] = useState<string[]>([]);
+  const [importDone, setImportDone] = useState(false);
+  const [importError, setImportError] = useState<string | null>(null);
+
   function updateExperience(i: number, field: keyof ExperienceEntry, value: string) {
     setExperience((prev) => prev.map((e, idx) => (idx === i ? { ...e, [field]: value } : e)));
   }
@@ -73,11 +81,11 @@ export function RegisterWizard() {
       if (password.length < 8) return "La contraseña debe tener al menos 8 caracteres";
       if (password !== confirmPassword) return "Las contraseñas no coinciden";
     }
-    if (i === 1) {
+    if (i === 2) {
       if (!firstName.trim() || !lastName.trim()) return "Nombre y apellido son requeridos";
       if (!province.trim() || !city.trim()) return "Provincia y municipio son requeridos";
     }
-    if (i === 2) {
+    if (i === 3) {
       if (!experience.some((e) => e.title.trim() && e.company.trim())) {
         return "Agregá al menos una experiencia con cargo y empresa";
       }
@@ -101,10 +109,10 @@ export function RegisterWizard() {
   }
 
   function handleSubmit() {
-    const err = validateStep(2);
+    const err = validateStep(3);
     if (err) {
       setError(err);
-      setStep(2);
+      setStep(3);
       return;
     }
     setError(null);
@@ -131,6 +139,68 @@ export function RegisterWizard() {
         router.push("/login?registered=1");
       }
     });
+  }
+
+  function applyProfile(p: ExtractedProfile) {
+    setFirstName((v) => v || p.firstName);
+    setLastName((v) => v || p.lastName);
+    setPhone((v) => v || p.phone);
+    setProvince((v) => v || p.province);
+    setCity((v) => v || p.city);
+    setStreet((v) => v || p.street);
+    setSummary((v) => v || p.summary);
+    if (p.languages.length) setLanguages((v) => v || p.languages.join("\n"));
+    if (p.skills.length) setSkills((v) => v || p.skills.join("\n"));
+    if (p.certifications.length) setCertifications((v) => v || p.certifications.join("\n"));
+    if (p.experience.length) {
+      setExperience(
+        p.experience.map((e) => ({
+          title: e.title,
+          company: e.company,
+          startDate: e.startDate,
+          endDate: e.endDate,
+          description: e.description,
+        })),
+      );
+    }
+    if (p.education.length) {
+      setEducation(
+        p.education.map((e) => ({
+          institution: e.institution,
+          degree: e.degree,
+          startDate: e.startDate,
+          endDate: e.endDate,
+          description: e.description,
+        })),
+      );
+    }
+  }
+
+  async function handleAnalyze() {
+    if (cvFiles.length === 0 && !linksText.trim()) {
+      setImportError("Subí al menos un CV o pegá un link");
+      return;
+    }
+    setImportError(null);
+    setImportWarnings([]);
+    setAnalyzing(true);
+    try {
+      const formData = new FormData();
+      for (const f of cvFiles) formData.append("files", f);
+      formData.append("links", linksText);
+      const result = await analyzeCvSources(formData);
+      if ("error" in result) {
+        setImportError(result.error);
+      } else {
+        applyProfile(result.profile);
+        setImportWarnings(result.warnings);
+        setImportDone(true);
+      }
+    } catch {
+      setImportError("No se pudo analizar las fuentes. Intentá de nuevo o completá manualmente.");
+    } finally {
+      setAnalyzing(false);
+    }
   }
 
   function handleKeyDown(e: React.KeyboardEvent) {
@@ -194,6 +264,91 @@ export function RegisterWizard() {
 
       {step === 1 && (
         <div className="flex flex-col gap-4">
+          <p className="text-sm text-text-muted -mt-1">
+            Opcional: subí tus CVs y/o links a tus perfiles (LinkedIn, etc.) y la IA completa todo solo.
+            Después lo revisás y editás en los siguientes pasos. También podés saltear este paso.
+          </p>
+
+          <div className="bg-bg border border-dashed border-border rounded-lg p-4 flex flex-col gap-3">
+            <label className={labelClass}>
+              <span className="inline-flex items-center gap-1.5">
+                <FaUpload size={11} /> CVs (PDF o TXT, hasta 5MB c/u)
+              </span>
+            </label>
+            <input
+              type="file"
+              multiple
+              accept=".pdf,.txt,.md"
+              onChange={(e) => {
+                setCvFiles((prev) => [...prev, ...Array.from(e.target.files ?? [])].slice(0, 8));
+                e.target.value = "";
+              }}
+              className="text-sm text-text-muted file:mr-3 file:rounded-md file:border-0 file:bg-accent/10 file:px-3 file:py-1.5 file:text-sm file:text-accent file:cursor-pointer hover:file:bg-accent/20"
+            />
+            {cvFiles.length > 0 && (
+              <ul className="flex flex-col gap-1">
+                {cvFiles.map((f, i) => (
+                  <li key={i} className="flex items-center justify-between text-sm text-text">
+                    <span className="truncate">{f.name}</span>
+                    <button
+                      type="button"
+                      onClick={() => setCvFiles((prev) => prev.filter((_, idx) => idx !== i))}
+                      className="text-text-muted hover:text-status-discarded transition-colors p-1"
+                      aria-label={`Quitar ${f.name}`}
+                    >
+                      <FaTrash size={11} />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
+          <Field label="Links a perfiles profesionales" hint="Uno por línea, ej. https://linkedin.com/in/tuusuario">
+            <textarea
+              className={inputClass}
+              rows={2}
+              value={linksText}
+              onChange={(e) => setLinksText(e.target.value)}
+              placeholder={"https://linkedin.com/in/tuusuario\nhttps://github.com/tuusuario"}
+            />
+          </Field>
+
+          <button
+            type="button"
+            onClick={handleAnalyze}
+            disabled={analyzing}
+            className="flex items-center justify-center gap-2 bg-accent text-accent-ink font-medium rounded-md px-4 py-2.5 text-sm hover:brightness-110 transition disabled:opacity-50"
+          >
+            <FaWandMagicSparkles size={13} />
+            {analyzing ? "Analizando con IA..." : "Completar con IA"}
+          </button>
+
+          {importError && (
+            <p role="alert" className="text-sm text-status-discarded bg-status-discarded/10 border border-status-discarded/25 rounded-md px-3 py-2">
+              {importError}
+            </p>
+          )}
+
+          {importDone && (
+            <div className="flex flex-col gap-2">
+              <p className="flex items-center gap-2 text-sm text-status-saved bg-status-saved/10 border border-status-saved/25 rounded-md px-3 py-2">
+                <FaCheck size={12} /> Listo. Revisá y corregí lo cargado en los siguientes pasos.
+              </p>
+              {importWarnings.length > 0 && (
+                <ul className="text-xs text-text-muted flex flex-col gap-1 list-disc pl-5">
+                  {importWarnings.map((w, i) => (
+                    <li key={i}>{w}</li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {step === 2 && (
+        <div className="flex flex-col gap-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Field label="Nombre">
               <input
@@ -256,7 +411,7 @@ export function RegisterWizard() {
         </div>
       )}
 
-      {step === 2 && (
+      {step === 3 && (
         <div className="flex flex-col gap-4">
           <p className="text-sm text-text-muted -mt-1">
             Esto es lo que la IA usa para armar tus CVs. Agregá al menos una experiencia real.
@@ -325,7 +480,7 @@ export function RegisterWizard() {
         </div>
       )}
 
-      {step === 3 && (
+      {step === 4 && (
         <div className="flex flex-col gap-4">
           <p className="text-sm text-text-muted -mt-1">Opcional, pero recomendado si tenés estudios relevantes.</p>
           {education.map((edu, i) => (
@@ -383,7 +538,7 @@ export function RegisterWizard() {
         </div>
       )}
 
-      {step === 4 && (
+      {step === 5 && (
         <div className="flex flex-col gap-4">
           <Field label="Resumen profesional (opcional)">
             <textarea
