@@ -11,13 +11,14 @@ import { GenerateCvButton } from "@/app/cv/GenerateCvButton";
 import { SOURCE_COLOR, SOURCE_LOGO, timeAgo } from "@/lib/jobDisplay";
 
 function pageHref(
-  params: { source?: string; keyword?: string; search?: string; sort?: string },
+  params: { source?: string; keyword?: string; search?: string; location?: string; sort?: string },
   page: number,
 ): string {
   const qs = new URLSearchParams();
   if (params.source) qs.set("source", params.source);
   if (params.keyword) qs.set("keyword", params.keyword);
   if (params.search) qs.set("search", params.search);
+  if (params.location) qs.set("location", params.location);
   if (params.sort) qs.set("sort", params.sort);
   if (page > 1) qs.set("page", String(page));
   const s = qs.toString();
@@ -31,6 +32,7 @@ export default async function Home({
     source?: string;
     keyword?: string;
     search?: string;
+    location?: string;
     sort?: string;
     page?: string;
   }>;
@@ -47,6 +49,7 @@ export default async function Home({
     source,
     keyword: params.keyword || undefined,
     search: params.search || undefined,
+    location: params.location || undefined,
     sort: params.sort === "oldest" ? "oldest" : "recent",
     userId: session?.user?.id,
     page,
@@ -56,6 +59,7 @@ export default async function Home({
     source,
     keyword: params.keyword || undefined,
     search: params.search || undefined,
+    location: params.location || undefined,
   });
   const totalPages = Math.max(1, Math.ceil(jobCount / pageSize));
   const lastScrapedAt = await getLastScrapedAt();
@@ -108,6 +112,20 @@ export default async function Home({
               <option value="ZONAJOBS">ZonaJobs</option>
               <option value="REDDIT">Reddit</option>
             </select>
+          </div>
+
+          <div className="flex flex-col gap-1">
+            <label htmlFor="location" className="font-mono text-[11px] uppercase tracking-widest text-text-muted">
+              Ubicación
+            </label>
+            <input
+              id="location"
+              type="text"
+              name="location"
+              defaultValue={params.location}
+              placeholder="ciudad, provincia..."
+              className="bg-bg border border-border rounded px-3 py-2 text-sm text-text placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-accent"
+            />
           </div>
 
           <div className="flex flex-col gap-1">

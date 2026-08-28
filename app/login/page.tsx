@@ -1,5 +1,6 @@
 import { loginWithCredentials } from "./actions";
 import { AuthCard } from "@/app/components/AuthCard";
+import PasswordInput from "@/app/components/PasswordInput";
 import Link from "next/link";
 
 export default async function LoginPage({
@@ -46,9 +47,8 @@ export default async function LoginPage({
           <label htmlFor="password" className={labelClass}>
             Contraseña
           </label>
-          <input
+          <PasswordInput
             id="password"
-            type="password"
             name="password"
             autoComplete="current-password"
             required

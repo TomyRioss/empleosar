@@ -5,6 +5,7 @@ export type JobFilters = {
   source?: JobSource;
   keyword?: string;
   search?: string;
+  location?: string;
   sort?: "recent" | "oldest";
   userId?: string;
   page?: number;
@@ -22,6 +23,9 @@ export async function getJobs(filters: JobFilters = {}) {
       source: filters.source,
       title: filters.search
         ? { contains: filters.search, mode: "insensitive" }
+        : undefined,
+      location: filters.location
+        ? { contains: filters.location, mode: "insensitive" }
         : undefined,
       keywords: filters.keyword
         ? { some: { keyword: { term: filters.keyword } } }
@@ -48,6 +52,9 @@ export async function getJobCount(filters: Omit<JobFilters, "sort" | "userId" | 
       source: filters.source,
       title: filters.search
         ? { contains: filters.search, mode: "insensitive" }
+        : undefined,
+      location: filters.location
+        ? { contains: filters.location, mode: "insensitive" }
         : undefined,
       keywords: filters.keyword
         ? { some: { keyword: { term: filters.keyword } } }

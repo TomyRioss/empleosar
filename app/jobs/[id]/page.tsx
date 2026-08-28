@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { StatusButtons } from "@/app/jobs/StatusButtons";
 import { GenerateCvButton } from "@/app/cv/GenerateCvButton";
+import { ExtensionAutoApply } from "@/app/components/ExtensionAutoApply";
 import { getKeywordCategory, getKeywordCategoryIcon } from "@/app/components/keywordCategories";
 import { SOURCE_COLOR, SOURCE_LOGO, timeAgo } from "@/lib/jobDisplay";
 import { summarizeJobDescription } from "@/lib/summarizeJob";
@@ -179,6 +180,16 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
                 isLoggedIn={!!session?.user}
                 initialCvId={job.generatedCvs && job.generatedCvs[0] ? job.generatedCvs[0].id : null}
               />
+              <div className="mt-2">
+                <ExtensionAutoApply
+                  jobId={job.id}
+                  jobUrl={job.url}
+                  title={job.title}
+                  company={job.company ?? undefined}
+                  source={job.source}
+                  cvId={job.generatedCvs && job.generatedCvs[0] ? job.generatedCvs[0].id : null}
+                />
+              </div>
             </div>
           </div>
         </aside>

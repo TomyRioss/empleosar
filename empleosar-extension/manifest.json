@@ -1,0 +1,34 @@
+{
+  "manifest_version": 3,
+  "name": "EmpleosAR Auto-Apply",
+  "version": "0.1.0",
+  "description": "Postula automáticamente el CV generado en EmpleosAR en Computrabajo, ZonaJobs y LinkedIn.",
+  "permissions": ["storage", "tabs"],
+  "host_permissions": [
+    "http://localhost:3000/*",
+    "https://ar.computrabajo.com/*",
+    "https://www.computrabajo.com.ar/*",
+    "https://www.zonajobs.com.ar/*",
+    "https://www.linkedin.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["http://localhost:3000/*"],
+      "js": ["content/web.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://ar.computrabajo.com/*",
+        "https://www.computrabajo.com.ar/*",
+        "https://www.zonajobs.com.ar/*",
+        "https://www.linkedin.com/*"
+      ],
+      "js": ["content/portal.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}

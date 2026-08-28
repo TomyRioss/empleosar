@@ -43,3 +43,7 @@ next-env.d.ts
 
 # scraper: persisted LinkedIn browser session (cookies, cache)
 /scraper/.session/
+
+# playwright
+/test-results/
+/playwright-report/

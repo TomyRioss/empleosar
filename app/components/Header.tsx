@@ -1,6 +1,7 @@
 import { auth, signOut } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import Link from "next/link";
+import { FaPuzzlePiece } from "react-icons/fa6";
 import { UserMenu } from "@/app/components/UserMenu";
 
 export async function Header() {
@@ -46,6 +47,14 @@ export async function Header() {
         </form>
 
         <div className="flex items-center gap-3 shrink-0">
+          <Link
+            href="/api/extension/download"
+            title="Postulá automáticamente el CV generado en el portal"
+            className="inline-flex items-center gap-1.5 text-xs font-medium border border-border rounded-full px-2.5 py-1.5 text-text-muted hover:text-text hover:border-text/40 transition"
+          >
+            <FaPuzzlePiece size={12} />
+            Extensión Auto-Postular
+          </Link>
           {session?.user ? (
             <>
               {profile && <UserMenu name={`${profile.firstName} ${profile.lastName}`} />}

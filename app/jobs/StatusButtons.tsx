@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useSyncExternalStore } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { setJobStatus } from "@/app/jobs/actions";
 import { JobStatusValue } from "@prisma/client";
+import { TT_STATUS_APPLIED } from "@/lib/extensionBridge";
 import { FaRegBookmark, FaBookmark, FaRegCircleCheck, FaCircleCheck, FaRegCircleXmark, FaCircleXmark } from "react-icons/fa6";
 import type { IconType } from "react-icons";
 
@@ -81,6 +82,18 @@ export function StatusButtons({
       writeGuestStatus(jobId, next);
     }
   }
+
+  // La extensión confirma el envío de la postulación desde el portal.
+  useEffect(() => {
+    function onAutoApplied(event: Event) {
+      const detail = (event as CustomEvent<{ jobId?: string }>).detail;
+      if (!detail || detail.jobId !== jobId) return;
+      handleClick("APPLIED");
+    }
+    window.addEventListener(TT_STATUS_APPLIED, onAutoApplied);
+    return () => window.removeEventListener(TT_STATUS_APPLIED, onAutoApplied);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [jobId, isLoggedIn]);
 
   return (
     <div className="flex gap-2 mt-3">

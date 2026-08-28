@@ -3,7 +3,8 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { FaTrash, FaPlus, FaArrowLeft, FaArrowRight, FaWandMagicSparkles, FaUpload, FaCheck } from "react-icons/fa6";
+import { FaTrash, FaPlus, FaArrowLeft, FaArrowRight, FaWandMagicSparkles, FaUpload, FaCheck, FaXmark } from "react-icons/fa6";
+import PasswordInput from "@/app/components/PasswordInput";
 import { registerUser, analyzeCvSources } from "./actions";
 import { StepIndicator } from "./StepIndicator";
 import type { ExperienceEntry, EducationEntry } from "@/lib/profileTypes";
@@ -36,6 +37,76 @@ function Field({
   );
 }
 
+function ListInput({
+  values,
+  onChange,
+  placeholder,
+  listId,
+  suggestions,
+}: {
+  values: string[];
+  onChange: (v: string[]) => void;
+  placeholder: string;
+  listId?: string;
+  suggestions?: string[];
+}) {
+  const [draft, setDraft] = useState("");
+
+  function add() {
+    const v = draft.trim();
+    if (!v) return;
+    if (!values.includes(v)) onChange([...values, v]);
+    setDraft("");
+  }
+  function remove(i: number) {
+    onChange(values.filter((_, idx) => idx !== i));
+  }
+  function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === "Enter" || e.key === ",") {
+      e.preventDefault();
+      e.stopPropagation();
+      add();
+    }
+  }
+
+  return (
+    <div className={inputClass + " flex flex-wrap items-center gap-1.5 cursor-text"}>
+      {values.map((v, i) => (
+        <span
+          key={i}
+          className="flex items-center gap-1.5 bg-accent/10 text-accent rounded-full pl-2.5 pr-1 py-1 text-xs"
+        >
+          {v}
+          <button
+            type="button"
+            onClick={() => remove(i)}
+            className="text-accent/60 hover:text-accent transition-colors p-0.5"
+            aria-label={`Quitar ${v}`}
+          >
+            <FaXmark size={10} />
+          </button>
+        </span>
+      ))}
+      <input
+        className="bg-transparent border-0 outline-none text-sm placeholder:text-text-muted/70 flex-1 min-w-28"
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onKeyDown={handleKeyDown}
+        onBlur={add}
+        placeholder={values.length === 0 ? placeholder : ""}
+        list={listId}
+      />
+      {suggestions && (
+        <datalist id={listId}>
+          {suggestions.map((s) => (
+            <option key={s} value={s} />
+          ))}
+        </datalist>
+      )}
+    </div>
+  );
+}
+
 export function RegisterWizard() {
   const router = useRouter();
   const [step, setStep] = useState(0);
@@ -57,12 +128,14 @@ export function RegisterWizard() {
   const [education, setEducation] = useState<EducationEntry[]>([]);
 
   const [summary, setSummary] = useState("");
-  const [languages, setLanguages] = useState("");
-  const [skills, setSkills] = useState("");
-  const [certifications, setCertifications] = useState("");
+  const [languages, setLanguages] = useState<string[]>([]);
+  const [skills, setSkills] = useState<string[]>([]);
+  const [certifications, setCertifications] = useState<string[]>([]);
 
   const [cvFiles, setCvFiles] = useState<File[]>([]);
-  const [linksText, setLinksText] = useState("");
+  const [linkedinUrl, setLinkedinUrl] = useState("");
+  const [githubUrl, setGithubUrl] = useState("");
+  const [websiteUrl, setWebsiteUrl] = useState("");
   const [analyzing, setAnalyzing] = useState(false);
   const [importWarnings, setImportWarnings] = useState<string[]>([]);
   const [importDone, setImportDone] = useState(false);
@@ -94,6 +167,7 @@ export function RegisterWizard() {
   }
 
   function goNext() {
+    if (analyzing) return;
     const err = validateStep(step);
     if (err) {
       setError(err);
@@ -127,9 +201,9 @@ export function RegisterWizard() {
         street,
         phone,
         summary,
-        languages: languages.split("\n").map((s) => s.trim()).filter(Boolean),
-        skills: skills.split("\n").map((s) => s.trim()).filter(Boolean),
-        certifications: certifications.split("\n").map((s) => s.trim()).filter(Boolean),
+        languages,
+        skills,
+        certifications,
         experience,
         education,
       });
@@ -149,9 +223,9 @@ export function RegisterWizard() {
     setCity((v) => v || p.city);
     setStreet((v) => v || p.street);
     setSummary((v) => v || p.summary);
-    if (p.languages.length) setLanguages((v) => v || p.languages.join("\n"));
-    if (p.skills.length) setSkills((v) => v || p.skills.join("\n"));
-    if (p.certifications.length) setCertifications((v) => v || p.certifications.join("\n"));
+    if (p.languages.length) setLanguages((v) => (v.length ? v : p.languages));
+    if (p.skills.length) setSkills((v) => (v.length ? v : p.skills));
+    if (p.certifications.length) setCertifications((v) => (v.length ? v : p.certifications));
     if (p.experience.length) {
       setExperience(
         p.experience.map((e) => ({
@@ -176,10 +250,34 @@ export function RegisterWizard() {
     }
   }
 
+  function normalizeUrl(value: string): string {
+    const url = value.trim();
+    if (!url) return "";
+    return /^https?:\/\//i.test(url) ? url : `https://${url}`;
+  }
+
+  function isValidUrl(value: string): boolean {
+    try {
+      new URL(value);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   async function handleAnalyze() {
-    if (cvFiles.length === 0 && !linksText.trim()) {
-      setImportError("Subí al menos un CV o pegá un link");
+    const links = [normalizeUrl(linkedinUrl), normalizeUrl(githubUrl), normalizeUrl(websiteUrl)]
+      .filter(Boolean)
+      .filter((l) => /^https?:\/\//i.test(l));
+    if (cvFiles.length === 0 && links.length === 0) {
+      setImportError("Subí al menos un CV o cargá un link a un perfil");
       return;
+    }
+    for (const link of links) {
+      if (!isValidUrl(link)) {
+        setImportError(`"${link}" no es una URL válida. Revisá que esté bien escrita.`);
+        return;
+      }
     }
     setImportError(null);
     setImportWarnings([]);
@@ -187,7 +285,7 @@ export function RegisterWizard() {
     try {
       const formData = new FormData();
       for (const f of cvFiles) formData.append("files", f);
-      formData.append("links", linksText);
+      formData.append("links", links.join("\n"));
       const result = await analyzeCvSources(formData);
       if ("error" in result) {
         setImportError(result.error);
@@ -204,7 +302,7 @@ export function RegisterWizard() {
   }
 
   function handleKeyDown(e: React.KeyboardEvent) {
-    if (e.key === "Enter" && step < STEP_LABELS.length - 1) {
+    if (e.key === "Enter" && step < STEP_LABELS.length - 1 && !analyzing) {
       const target = e.target as HTMLElement;
       if (target.tagName !== "TEXTAREA") {
         e.preventDefault();
@@ -240,8 +338,7 @@ export function RegisterWizard() {
             />
           </Field>
           <Field label="Contraseña" hint="Mínimo 8 caracteres">
-            <input
-              type="password"
+            <PasswordInput
               autoComplete="new-password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
@@ -250,8 +347,7 @@ export function RegisterWizard() {
             />
           </Field>
           <Field label="Confirmar contraseña">
-            <input
-              type="password"
+            <PasswordInput
               autoComplete="new-password"
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
@@ -280,8 +376,9 @@ export function RegisterWizard() {
               multiple
               accept=".pdf,.txt,.md"
               onChange={(e) => {
-                setCvFiles((prev) => [...prev, ...Array.from(e.target.files ?? [])].slice(0, 8));
+                const files = Array.from(e.target.files ?? []);
                 e.target.value = "";
+                setCvFiles((prev) => [...prev, ...files].slice(0, 8));
               }}
               className="text-sm text-text-muted file:mr-3 file:rounded-md file:border-0 file:bg-accent/10 file:px-3 file:py-1.5 file:text-sm file:text-accent file:cursor-pointer hover:file:bg-accent/20"
             />
@@ -304,14 +401,39 @@ export function RegisterWizard() {
             )}
           </div>
 
-          <Field label="Links a perfiles profesionales" hint="Uno por línea, ej. https://linkedin.com/in/tuusuario">
-            <textarea
-              className={inputClass}
-              rows={2}
-              value={linksText}
-              onChange={(e) => setLinksText(e.target.value)}
-              placeholder={"https://linkedin.com/in/tuusuario\nhttps://github.com/tuusuario"}
-            />
+          <Field label="Links a perfiles profesionales" hint="Opcional. Ej: linkedin.com/in/tuusuario">
+            <div className="grid grid-cols-1 gap-2">
+              <div className="flex items-center gap-2">
+                <span className="font-mono text-[11px] uppercase tracking-widest text-text-muted w-16 shrink-0">LinkedIn</span>
+                <input
+                  className={inputClass}
+                  inputMode="url"
+                  value={linkedinUrl}
+                  onChange={(e) => setLinkedinUrl(e.target.value)}
+                  placeholder="linkedin.com/in/tuusuario"
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="font-mono text-[11px] uppercase tracking-widest text-text-muted w-16 shrink-0">GitHub</span>
+                <input
+                  className={inputClass}
+                  inputMode="url"
+                  value={githubUrl}
+                  onChange={(e) => setGithubUrl(e.target.value)}
+                  placeholder="github.com/tuusuario"
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="font-mono text-[11px] uppercase tracking-widest text-text-muted w-16 shrink-0">Sitio</span>
+                <input
+                  className={inputClass}
+                  inputMode="url"
+                  value={websiteUrl}
+                  onChange={(e) => setWebsiteUrl(e.target.value)}
+                  placeholder="misitio.com"
+                />
+              </div>
+            </div>
           </Field>
 
           <button
@@ -549,19 +671,20 @@ export function RegisterWizard() {
               placeholder="Breve descripción de tu perfil profesional"
             />
           </Field>
-          <Field label="Idiomas" hint="Uno por línea, ej. Español (nativo)">
-            <textarea className={inputClass} rows={2} value={languages} onChange={(e) => setLanguages(e.target.value)} />
-          </Field>
-          <Field label="Habilidades" hint="Una por línea">
-            <textarea className={inputClass} rows={2} value={skills} onChange={(e) => setSkills(e.target.value)} />
-          </Field>
-          <Field label="Certificaciones (opcional)" hint="Una por línea">
-            <textarea
-              className={inputClass}
-              rows={2}
-              value={certifications}
-              onChange={(e) => setCertifications(e.target.value)}
+          <Field label="Idiomas" hint="Enter o coma para agregar. Ej: Español (nativo)">
+            <ListInput
+              values={languages}
+              onChange={setLanguages}
+              placeholder="Español (nativo)"
+              listId="languages-suggestions"
+              suggestions={["Español (nativo)", "Inglés", "Portugués", "Francés", "Alemán", "Italiano"]}
             />
+          </Field>
+          <Field label="Habilidades" hint="Enter o coma para agregar. Una por tag">
+            <ListInput values={skills} onChange={setSkills} placeholder="Ej: Excel, Comunicación, Python" />
+          </Field>
+          <Field label="Certificaciones (opcional)" hint="Enter o coma para agregar">
+            <ListInput values={certifications} onChange={setCertifications} placeholder="Ej: AWS Certified, Scrum Master" />
           </Field>
         </div>
       )}
@@ -584,7 +707,8 @@ export function RegisterWizard() {
           <button
             type="button"
             onClick={goNext}
-            className="flex items-center gap-1.5 bg-accent text-accent-ink font-medium rounded-md px-4 py-2 text-sm hover:brightness-110 transition"
+            disabled={analyzing}
+            className="flex items-center gap-1.5 bg-accent text-accent-ink font-medium rounded-md px-4 py-2 text-sm hover:brightness-110 transition disabled:opacity-50"
           >
             Siguiente <FaArrowRight size={11} />
           </button>

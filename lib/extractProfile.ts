@@ -154,9 +154,14 @@ export async function analyzeProfileSources(
       sources.push({ label: `Perfil online ${link}`, text: text.slice(0, MAX_CHARS_PER_SOURCE) });
       totalChars += text.length;
     } catch (err) {
-      warnings.push(
-        `${link}: no se pudo leer (${err instanceof Error ? err.message : "error"}). Podés subir tu CV como PDF.`
-      );
+      const reason = err instanceof Error ? err.message : "error";
+      if (/linkedin\.com/i.test(link) && /HTTP 999/i.test(reason)) {
+        warnings.push(
+          `${link}: LinkedIn no permite la lectura automática de perfiles (requiere iniciar sesión). Podés subir tu CV como PDF o agregar los datos manualmente.`
+        );
+      } else {
+        warnings.push(`${link}: no se pudo leer (${reason}). Podés subir tu CV como PDF.`);
+      }
     }
     if (totalChars > MAX_TOTAL_CHARS) break;
   }

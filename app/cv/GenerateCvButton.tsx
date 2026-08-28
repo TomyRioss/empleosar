@@ -2,7 +2,11 @@
 
 import { useState, useTransition } from "react";
 import Link from "next/link";
+import { FaWandMagicSparkles, FaDownload, FaSpinner } from "react-icons/fa6";
 import { generateCvAction } from "./actions";
+
+const PILL =
+  "inline-flex items-center justify-center gap-1.5 w-full text-xs font-medium rounded-full px-3 py-2 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 disabled:opacity-50 disabled:cursor-not-allowed";
 
 export function GenerateCvButton({
   jobId,
@@ -21,8 +25,9 @@ export function GenerateCvButton({
     return (
       <Link
         href="/login"
-        className="text-xs font-medium border rounded-full px-2.5 py-1 bg-accent/10 border-accent/25 text-accent hover:bg-accent/20 transition"
+        className={`${PILL} bg-accent/10 border border-accent/25 text-accent hover:bg-accent/20`}
       >
+        <FaWandMagicSparkles size={12} />
         Generar CV para esta oferta
       </Link>
     );
@@ -46,25 +51,36 @@ export function GenerateCvButton({
         href={`/api/cv/generated/${cvId}`}
         target="_blank"
         rel="noopener noreferrer"
-        className="text-xs font-medium border rounded-full px-2.5 py-1 bg-status-applied/20 border-status-applied text-status-applied"
+        className={`${PILL} bg-status-applied/20 border border-status-applied text-status-applied hover:bg-status-applied/30`}
       >
+        <FaDownload size={12} />
         Descargar CV generado
       </a>
     );
   }
 
   return (
-    <div className="flex flex-col items-end gap-1">
+    <div className="flex flex-col gap-1">
       <button
         type="button"
         onClick={handleClick}
         disabled={isPending}
-        className="text-xs font-medium border rounded-full px-2.5 py-1 bg-accent/10 border-accent/25 text-accent hover:bg-accent/20 transition disabled:opacity-50"
+        className={`${PILL} bg-accent/10 border border-accent/25 text-accent hover:bg-accent/20`}
       >
-        {isPending ? "Generando..." : "Generar CV para esta oferta"}
+        {isPending ? (
+          <>
+            <FaSpinner className="animate-spin" size={11} />
+            Generando CV…
+          </>
+        ) : (
+          <>
+            <FaWandMagicSparkles size={12} />
+            Generar CV para esta oferta
+          </>
+        )}
       </button>
       {error && (
-        <p className="text-[11px] text-status-discarded max-w-[220px] text-right">
+        <p className="text-[11px] text-status-discarded">
           {error}{" "}
           {error.includes("perfil") && (
             <Link href="/profile" className="underline underline-offset-2">
